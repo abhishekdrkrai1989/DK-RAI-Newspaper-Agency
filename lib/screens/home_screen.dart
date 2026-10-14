@@ -3,6 +3,7 @@ import '../l10n/app_strings.dart';
 import '../models/customer.dart';
 import '../models/publication.dart';
 import '../providers/delivery_provider.dart';
+import '../widgets/edit_admin_pin_dialog.dart';
 import '../widgets/pause_paper_dialog.dart';
 import 'approvals_screen.dart';
 import 'block_wise_consumption_screen.dart';
@@ -1163,6 +1164,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (_) => DeliveryBoysScreen(provider: p),
                       ),
                     );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.key, color: Color(0xFF1E3A8A)),
+                  title: Text(s.editAdminProfile),
+                  subtitle: Text(
+                    '${s.tr("Current PIN", "वर्तमान पिन")}: ${p.ownerUser.pin}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    showEditAdminPinDialog(context: context, provider: p);
                   },
                 ),
               ],

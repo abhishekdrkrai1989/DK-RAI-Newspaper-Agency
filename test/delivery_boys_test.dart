@@ -111,6 +111,29 @@ void main() {
       expect(ownerDeleted, false);
       expect(provider.allUsers.any((u) => u.id == owner.id), true);
     });
+
+    test('Admin can update own login PIN and profile details', () async {
+      expect(provider.ownerUser.pin, '1234');
+
+      // Update Owner PIN to 7788
+      await provider.updateOwnerProfile(
+        name: 'D K Rai (Director)',
+        phone: '9988776655',
+        newPin: '7788',
+      );
+
+      expect(provider.ownerUser.pin, '7788');
+      expect(provider.ownerUser.name, 'D K Rai (Director)');
+      expect(provider.ownerUser.phone, '9988776655');
+
+      // Old PIN fails to log in
+      final oldLogin = await provider.login(provider.ownerUser.id, '1234');
+      expect(oldLogin, false);
+
+      // New PIN logs in successfully
+      final newLogin = await provider.login(provider.ownerUser.id, '7788');
+      expect(newLogin, true);
+    });
   });
 
   group('DeliveryBoysScreen UI Widget Tests', () {
@@ -122,7 +145,7 @@ void main() {
       provider = DeliveryProvider(storage);
     });
 
-    testWidgets('DeliveryBoysScreen renders list, summary metrics, and FAB',
+    testWidgets('DeliveryBoysScreen renders list, admin PIN card, and FAB',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -134,20 +157,21 @@ void main() {
       // Verify Screen Title
       expect(find.text('Delivery Boys Management'), findsOneWidget);
 
+      // Verify Admin card with Change PIN button
+      expect(find.text('Change PIN'), findsOneWidget);
+
       // Verify default delivery boy "Ramesh" is rendered
       expect(find.textContaining('Ramesh'), findsOneWidget);
 
       // Verify FAB to add delivery boy is present
       expect(find.byType(FloatingActionButton), findsOneWidget);
 
-      // Tap FAB to open create sheet
-      await tester.tap(find.byType(FloatingActionButton));
+      // Tap Change PIN button to open change pin dialog
+      await tester.tap(find.text('Change PIN'));
       await tester.pumpAndSettle();
 
-      // Verify Add New Delivery Boy form is opened
-      expect(find.text('Add New Delivery Boy'), findsAtLeastNWidgets(1));
-      expect(find.text('Delivery Boy Name'), findsOneWidget);
-      expect(find.text('Mobile / Phone Number'), findsOneWidget);
+      expect(find.text('Edit Admin Profile & PIN'), findsOneWidget);
+      expect(find.text('New 4-Digit Login PIN'), findsOneWidget);
     });
   });
 }

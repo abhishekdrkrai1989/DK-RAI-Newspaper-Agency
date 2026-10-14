@@ -416,4 +416,12 @@ class AppStrings {
   String get generatePinBtn => tr('Generate PIN', 'पिन बनाएं');
   String get ownerOnlyAccess =>
       tr('Only Owner (Admin) can manage delivery boys.', 'केवल मालिक (एडमिन) ही डिलीवरी बॉय का प्रबंधन कर सकते हैं।');
+  String get editAdminProfile =>
+      tr('Edit Admin Profile & PIN', 'एडमिन प्रोफ़ाइल व पिन बदलें');
+  String get changeAdminPinSubtitle =>
+      tr('Update owner name, phone, and 4-digit login PIN', 'मालिक का नाम, मोबाइल और 4 अंकों का लॉगिन पिन बदलें');
+  String get ownerProfileSavedSuccess =>
+      tr('Admin profile and PIN updated successfully!', 'एडमिन प्रोफ़ाइल और लॉगिन पिन सफलतापूर्वक बदल दिया गया!');
+  String get ownerCardTitle =>
+      tr('Agency Owner / Admin (You)', 'एजेंसी मालिक (एडमिन)');
 }

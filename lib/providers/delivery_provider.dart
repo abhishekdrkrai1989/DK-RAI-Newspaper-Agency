@@ -686,6 +686,34 @@ class DeliveryProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  AppUser get ownerUser => _users.firstWhere(
+        (u) => u.isOwner,
+        orElse: () => AppUser.defaultUsers().first,
+      );
+
+  Future<void> updateOwnerProfile({
+    String? name,
+    String? phone,
+    required String newPin,
+  }) async {
+    final index = _users.indexWhere((u) => u.isOwner);
+    if (index != -1) {
+      final current = _users[index];
+      final updated = current.copyWith(
+        name: name?.trim().isNotEmpty == true ? name!.trim() : current.name,
+        phone: phone != null ? phone.trim() : current.phone,
+        pin: newPin.trim(),
+      );
+      _users[index] = updated;
+      if (_currentUser?.isOwner == true) {
+        _currentUser = updated;
+        await _storage.saveCurrentUser(_currentUser);
+      }
+      await _storage.saveUsers(_users);
+      notifyListeners();
+    }
+  }
+
   Future<void> switchUser(AppUser user) async {
     _currentUser = user;
     await _storage.saveCurrentUser(user);
