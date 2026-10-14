@@ -171,13 +171,34 @@ class CloudSyncService {
       if (customers.isNotEmpty) {
         final custUri = Uri.parse('$cleanUrl/rest/v1/customers');
         final custRows = customers.map((c) => _customerToRow(c)).toList();
-        final custRes = await _client
+        var custRes = await _client
             .post(
               custUri,
               headers: _headers(anonKey, upsert: true),
               body: jsonEncode(custRows),
             )
             .timeout(const Duration(seconds: 25));
+
+        // If remote table lacks newly added columns (delivery_boy_id, delivery_boy_name), auto-fallback without them:
+        if (custRes.statusCode == 400 &&
+            (custRes.body.contains('delivery_boy_id') ||
+                custRes.body.contains('delivery_boy_name') ||
+                custRes.body.contains('PGRST204'))) {
+          final fallbackRows = custRows.map((r) {
+            final copy = Map<String, dynamic>.from(r);
+            copy.remove('delivery_boy_id');
+            copy.remove('delivery_boy_name');
+            return copy;
+          }).toList();
+
+          custRes = await _client
+              .post(
+                custUri,
+                headers: _headers(anonKey, upsert: true),
+                body: jsonEncode(fallbackRows),
+              )
+              .timeout(const Duration(seconds: 25));
+        }
 
         if (custRes.statusCode < 200 || custRes.statusCode >= 300) {
           return CloudSyncResult(
@@ -813,6 +834,10 @@ create table if not exists customers (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
+-- Migration for existing customers table:
+alter table customers add column if not exists delivery_boy_id text default '';
+alter table customers add column if not exists delivery_boy_name text default '';
+
 -- 3. Create Delivery Boys / Hawkers Table (Profiles & Credentials)
 create table if not exists delivery_boys (
   id text primary key,
@@ -878,5 +903,56 @@ create policy "Allow all on newspaper_events for anon"
   on newspaper_events for all
   using (true)
   with check (true);
+
+-- 7. Notify PostgREST to reload schema cache immediately
+notify pgrst, 'reload schema';
+''';
+
+  /// Quick 1-click SQL migration for existing databases
+  static String get migrationSqlScript => '''
+-- Run this in Supabase SQL Editor to update your existing database:
+alter table customers add column if not exists delivery_boy_id text default '';
+alter table customers add column if not exists delivery_boy_name text default '';
+
+create table if not exists delivery_boys (
+  id text primary key,
+  name text not null,
+  role text not null default 'deliveryBoy',
+  pin text not null default '0000',
+  phone text default '',
+  assigned_area text default '',
+  is_active boolean default true,
+  vehicle_number text default '',
+  notes text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+alter table delivery_boys enable row level security;
+drop policy if exists "Allow all on delivery_boys for anon" on delivery_boys;
+create policy "Allow all on delivery_boys for anon" on delivery_boys for all using (true) with check (true);
+
+create table if not exists newspaper_events (
+  id text primary key,
+  event_type text not null,
+  customer_id text default '',
+  customer_name text not null,
+  house_number text default '',
+  block text default '',
+  area text not null default '',
+  delivery_boy_id text default '',
+  delivery_boy_name text default '',
+  newspaper_name text not null,
+  publication_id text default '',
+  quantity integer default 1,
+  timestamp text not null,
+  pause_start_date text,
+  pause_end_date text,
+  note text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+alter table newspaper_events enable row level security;
+drop policy if exists "Allow all on newspaper_events for anon" on newspaper_events;
+create policy "Allow all on newspaper_events for anon" on newspaper_events for all using (true) with check (true);
+
+notify pgrst, 'reload schema';
 ''';
 }

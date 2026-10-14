@@ -253,6 +253,54 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                   ),
                 ),
               ),
+              if (!p.lastSyncSuccess &&
+                  (p.lastSyncMessage!.contains('delivery_boy') ||
+                      p.lastSyncMessage!.contains('schema cache') ||
+                      p.lastSyncMessage!.contains('PGRST204'))) ...[
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade900,
+                      side: BorderSide(color: Colors.red.shade400),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    icon: const Icon(Icons.copy, size: 14),
+                    label: Text(
+                      s.isHindi
+                          ? '1-क्लिक SQL कॉपी करें (Supabase में चलाएं)'
+                          : 'Copy 1-Click SQL Fix (Run in Supabase)',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(
+                          text: CloudSyncService.migrationSqlScript,
+                        ),
+                      );
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              s.isHindi
+                                  ? 'SQL कॉपी हो गया! Supabase SQL Editor में पेस्ट करके RUN दबाएं।'
+                                  : 'SQL copied! Paste & Run in Supabase SQL Editor.',
+                            ),
+                            backgroundColor: Colors.indigo.shade700,
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
             ],
             const SizedBox(height: 10),
             Container(

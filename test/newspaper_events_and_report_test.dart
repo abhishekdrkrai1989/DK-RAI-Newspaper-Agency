@@ -199,7 +199,12 @@ void main() {
       expect(sql.contains('delivery_boy_id text default \'\''), isTrue);
       expect(sql.contains('alter table newspaper_events enable row level security'), isTrue);
       expect(sql.contains('Allow all on newspaper_events for anon'), isTrue);
-      expect(sql.contains('delivery_boy_id text default \'\''), isTrue);
+      expect(sql.contains('notify pgrst, \'reload schema\';'), isTrue);
+
+      final migSql = CloudSyncService.migrationSqlScript;
+      expect(migSql.contains('alter table customers add column if not exists delivery_boy_id'), isTrue);
+      expect(migSql.contains('alter table customers add column if not exists delivery_boy_name'), isTrue);
+      expect(migSql.contains('notify pgrst, \'reload schema\';'), isTrue);
     });
   });
 }
