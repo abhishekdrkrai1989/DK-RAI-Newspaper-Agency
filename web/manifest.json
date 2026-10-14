@@ -1,0 +1,35 @@
+{
+    "name": "D K Rai Newspaper Agency",
+    "short_name": "D K Rai Agency",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#1E3A8A",
+    "theme_color": "#1E3A8A",
+    "description": "Offline newspaper distribution list and pause/start tracker for D K Rai Newspaper Agency.",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
