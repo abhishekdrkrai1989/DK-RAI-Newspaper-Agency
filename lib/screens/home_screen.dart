@@ -14,6 +14,7 @@ import 'delivery_boys_screen.dart';
 import 'login_screen.dart';
 import 'monthly_billing_report_screen.dart';
 import 'morning_delivery_list_screen.dart';
+import 'newspaper_report_screen.dart';
 import 'publications_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -238,6 +239,22 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => CloudSyncScreen(provider: p),
+                    ),
+                  );
+                },
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(6),
+                tooltip: s.tr(
+                  'Hawker & Area Newspaper Report',
+                  'हॉकर व क्षेत्र अखबार रिपोर्ट',
+                ),
+                icon: const Icon(Icons.assessment, color: Colors.amberAccent),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => NewspaperReportScreen(provider: p),
                     ),
                   );
                 },
@@ -553,6 +570,45 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: Color(0xFF1E3A8A),
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    NewspaperReportScreen(provider: p),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE0E7FF),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.assessment,
+                                  size: 13,
+                                  color: Color(0xFF1E3A8A),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  s.tr('Hawker/Area Report', 'हॉकर/क्षेत्र रिपोर्ट'),
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E3A8A),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -1132,7 +1188,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   leading: const Icon(Icons.key, color: Color(0xFF1E3A8A)),
                   title: Text(s.editAdminProfile),
                   subtitle: Text(
-                    '${s.tr("Current PIN", "वर्तमान पिन")}: ${p.ownerUser.pin}',
+                    '${s.tr("Current PIN", "वर्तमान पिन")}: ••••',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.arrow_forward_ios, size: 14),
@@ -1141,32 +1197,46 @@ class _HomeScreenState extends State<HomeScreen> {
                     showEditAdminPinDialog(context: context, provider: p);
                   },
                 ),
+                // Switch role buttons - Shown ONLY in Admin account!
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Text(
+                    s.isHindi
+                        ? 'उपयोगकर्ता बदलें (केवल एडमिन)'
+                        : 'Switch User (Admin Only)',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+                ...p.allUsers.map((user) {
+                  final isCurrent = user.id == p.currentUser?.id;
+                  if (isCurrent) return const SizedBox.shrink();
+                  return ListTile(
+                    leading: Icon(
+                      user.isOwner
+                          ? Icons.admin_panel_settings
+                          : Icons.delivery_dining,
+                      color: user.isOwner
+                          ? const Color(0xFF1E3A8A)
+                          : const Color(0xFF059669),
+                    ),
+                    title: Text(
+                      user.isOwner
+                          ? '${s.isHindi ? 'स्विच करें' : 'Switch to'}: ${s.roleOwner}'
+                          : '${s.isHindi ? 'स्विच करें' : 'Switch to'}: ${s.roleDeliveryBoy}',
+                    ),
+                    subtitle: Text(user.name),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await p.switchUser(user);
+                    },
+                  );
+                }),
               ],
-              // Switch role buttons
-              ...p.allUsers.map((user) {
-                final isCurrent = user.id == p.currentUser?.id;
-                if (isCurrent) return const SizedBox.shrink();
-                return ListTile(
-                  leading: Icon(
-                    user.isOwner
-                        ? Icons.admin_panel_settings
-                        : Icons.delivery_dining,
-                    color: user.isOwner
-                        ? const Color(0xFF1E3A8A)
-                        : const Color(0xFF059669),
-                  ),
-                  title: Text(
-                    user.isOwner
-                        ? '${s.isHindi ? 'स्विच करें' : 'Switch to'}: ${s.roleOwner}'
-                        : '${s.isHindi ? 'स्विच करें' : 'Switch to'}: ${s.roleDeliveryBoy}',
-                  ),
-                  subtitle: Text(user.name),
-                  onTap: () async {
-                    Navigator.pop(ctx);
-                    await p.switchUser(user);
-                  },
-                );
-              }),
               const SizedBox(height: 8),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -1190,7 +1260,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
                 icon: const Icon(Icons.logout, size: 18),
-                label: Text(s.logoutBtn),
+                label: Text(
+                  p.isOwner ? s.logoutBtn : s.tr('Logout', 'लॉगआउट'),
+                ),
               ),
             ],
           ),

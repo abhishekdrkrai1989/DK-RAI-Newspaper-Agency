@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/app_user.dart';
 import '../models/customer.dart';
 import '../models/publication.dart';
 import '../providers/delivery_provider.dart';
@@ -29,12 +30,14 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   late TextEditingController _notesCtrl;
 
   late DeliveryStatus _status;
+  String? _selectedDeliveryBoyId;
   final Map<String, SubscriptionItem> _selectedSubs = {};
 
   @override
   void initState() {
     super.initState();
     final c = widget.existingCustomer;
+    _selectedDeliveryBoyId = c?.deliveryBoyId;
     final nextSeq = widget.provider.allCustomers.isEmpty
         ? 1
         : (widget.provider.allCustomers
@@ -184,6 +187,20 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         ? blockText
         : Customer.inferBlockFromHouseNumber(houseNo);
 
+    String? assignedName;
+    if (_selectedDeliveryBoyId != null && _selectedDeliveryBoyId!.isNotEmpty) {
+      final boy = widget.provider.allUsers.firstWhere(
+        (u) => u.id == _selectedDeliveryBoyId,
+        orElse: () => AppUser(
+          id: '',
+          name: '',
+          role: UserRole.deliveryBoy,
+          pin: '',
+        ),
+      );
+      if (boy.name.isNotEmpty) assignedName = boy.name;
+    }
+
     final customer = Customer(
       id: existing?.id ?? 'cust_${now.millisecondsSinceEpoch}',
       sequenceNo: seq,
@@ -199,6 +216,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           _status == DeliveryStatus.paused ? existing?.pauseEndDate : null,
       pauseReason:
           _status == DeliveryStatus.paused ? (existing?.pauseReason ?? '') : '',
+      deliveryBoyId: _selectedDeliveryBoyId ?? '',
+      deliveryBoyName: assignedName ?? '',
       subscriptions: _selectedSubs.values.toList(),
       deliveredDates: existing?.deliveredDates ?? const [],
       statusHistory: history,
@@ -356,6 +375,42 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
               ),
             ),
             const SizedBox(height: 14),
+
+            // Delivery Boy / Hawker Assignment
+            DropdownButtonFormField<String?>(
+              value: _selectedDeliveryBoyId,
+              decoration: InputDecoration(
+                labelText: s.tr(
+                  'Assigned Hawker / Delivery Boy',
+                  'सौंपा गया हॉकर / डिलीवरी बॉय',
+                ),
+                prefixIcon: const Icon(Icons.two_wheeler_outlined),
+                border: const OutlineInputBorder(),
+              ),
+              items: [
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(s.tr('Auto / Unassigned', 'स्वचालित / कोई नहीं')),
+                ),
+                ...widget.provider.allUsers
+                    .where((u) => u.isDeliveryBoy)
+                    .map((boy) {
+                  return DropdownMenuItem<String?>(
+                    value: boy.id,
+                    child: Text(
+                      '${boy.name} (${boy.assignedArea.isNotEmpty ? boy.assignedArea : boy.phone})',
+                    ),
+                  );
+                }),
+              ],
+              onChanged: (val) {
+                setState(() {
+                  _selectedDeliveryBoyId = val;
+                });
+              },
+            ),
+            const SizedBox(height: 14),
+
             TextFormField(
               controller: _notesCtrl,
               decoration: InputDecoration(

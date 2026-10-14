@@ -51,6 +51,8 @@ class Customer {
   final List<String> deliveredDates;
   final List<StatusLog> statusHistory;
   final String notes;
+  final String deliveryBoyId;
+  final String deliveryBoyName;
 
   const Customer({
     required this.id,
@@ -68,6 +70,8 @@ class Customer {
     this.deliveredDates = const [],
     this.statusHistory = const [],
     this.notes = '',
+    this.deliveryBoyId = '',
+    this.deliveryBoyName = '',
   });
 
   static String dateKey(DateTime date) {
@@ -147,6 +151,8 @@ class Customer {
     List<String>? deliveredDates,
     List<StatusLog>? statusHistory,
     String? notes,
+    String? deliveryBoyId,
+    String? deliveryBoyName,
   }) {
     return Customer(
       id: id ?? this.id,
@@ -166,6 +172,8 @@ class Customer {
       deliveredDates: deliveredDates ?? this.deliveredDates,
       statusHistory: statusHistory ?? this.statusHistory,
       notes: notes ?? this.notes,
+      deliveryBoyId: deliveryBoyId ?? this.deliveryBoyId,
+      deliveryBoyName: deliveryBoyName ?? this.deliveryBoyName,
     );
   }
 
@@ -186,6 +194,8 @@ class Customer {
       'deliveredDates': deliveredDates,
       'statusHistory': statusHistory.map((h) => h.toJson()).toList(),
       'notes': notes,
+      'deliveryBoyId': deliveryBoyId,
+      'deliveryBoyName': deliveryBoyName,
     };
   }
 
@@ -223,6 +233,12 @@ class Customer {
           .map((e) => StatusLog.fromJson(e as Map<String, dynamic>))
           .toList(),
       notes: json['notes'] as String? ?? '',
+      deliveryBoyId: (json['deliveryBoyId'] as String?) ??
+          (json['delivery_boy_id'] as String?) ??
+          '',
+      deliveryBoyName: (json['deliveryBoyName'] as String?) ??
+          (json['delivery_boy_name'] as String?) ??
+          '',
     );
   }
 }

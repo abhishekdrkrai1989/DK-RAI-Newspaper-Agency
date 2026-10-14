@@ -4,6 +4,7 @@ import '../l10n/app_strings.dart';
 import '../models/app_user.dart';
 import '../models/approval_request.dart';
 import '../models/customer.dart';
+import '../models/newspaper_event.dart';
 import '../models/publication.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/local_storage_service.dart';
@@ -22,6 +23,7 @@ class DeliveryProvider extends ChangeNotifier {
   late AppLanguage _language;
   late List<Publication> _publications;
   late List<Customer> _customers;
+  late List<NewspaperEvent> _newspaperEvents;
 
   late List<AppUser> _users;
   AppUser? _currentUser;
@@ -47,6 +49,7 @@ class DeliveryProvider extends ChangeNotifier {
     _language = _storage.loadLanguage();
     _publications = _storage.loadPublications();
     _customers = _storage.loadCustomers();
+    _newspaperEvents = _storage.loadNewspaperEvents();
     _supabaseUrl = _storage.loadSupabaseUrl();
     if (_supabaseUrl.isEmpty) {
       _supabaseUrl = LocalStorageService.defaultSupabaseUrl;
@@ -79,6 +82,8 @@ class DeliveryProvider extends ChangeNotifier {
   AppStrings get strings => AppStrings(_language);
   List<Publication> get publications => List.unmodifiable(_publications);
   List<Customer> get allCustomers => List.unmodifiable(_customers);
+  List<NewspaperEvent> get newspaperEvents =>
+      List.unmodifiable(_newspaperEvents);
   DistributionFilter get filter => _filter;
   String? get selectedArea => _selectedArea;
   String? get selectedBlock => _selectedBlock;
@@ -353,6 +358,29 @@ class DeliveryProvider extends ChangeNotifier {
     );
 
     await _storage.saveCustomers(_customers);
+
+    // Record Started event for each subscription
+    for (final sub in current.subscriptions) {
+      final pub = getPublicationById(sub.publicationId);
+      final pubName = pub?.nameEn ?? sub.publicationId;
+      await recordNewspaperEvent(
+        eventType: NewspaperEventType.started,
+        customerId: current.id,
+        customerName: current.name,
+        houseNumber: current.houseNumber,
+        block: current.block,
+        area: current.area,
+        deliveryBoyId: current.deliveryBoyId,
+        deliveryBoyName: current.deliveryBoyName ??
+            getAssignedDeliveryBoyNameForCustomer(current),
+        newspaperName: pubName,
+        publicationId: sub.publicationId,
+        quantity: sub.quantity,
+        note: note.isNotEmpty ? note : 'Paper resumed',
+        skipSync: true,
+      );
+    }
+
     notifyListeners();
     _triggerAutoSync();
     _recordDeliveryBoyAction(
@@ -390,12 +418,38 @@ class DeliveryProvider extends ChangeNotifier {
     );
 
     await _storage.saveCustomers(_customers);
+
+    // Record Paused event for each subscription
+    for (final sub in current.subscriptions) {
+      final pub = getPublicationById(sub.publicationId);
+      final pubName = pub?.nameEn ?? sub.publicationId;
+      await recordNewspaperEvent(
+        eventType: NewspaperEventType.paused,
+        customerId: current.id,
+        customerName: current.name,
+        houseNumber: current.houseNumber,
+        block: current.block,
+        area: current.area,
+        deliveryBoyId: current.deliveryBoyId,
+        deliveryBoyName: current.deliveryBoyName ??
+            getAssignedDeliveryBoyNameForCustomer(current),
+        newspaperName: pubName,
+        publicationId: sub.publicationId,
+        quantity: sub.quantity,
+        pauseStartDate: pauseStartDate,
+        pauseEndDate: pauseEndDate,
+        note: reason.isNotEmpty ? reason : 'Paper paused',
+        skipSync: true,
+      );
+    }
+
     notifyListeners();
     _triggerAutoSync();
     _recordDeliveryBoyAction(
       actionType: ApprovalActionType.pausePaper,
       title: 'Paper Paused: ${current.name} (${current.houseNumber})',
-      description: 'Paused paper delivery${reason.isNotEmpty ? " ($reason)" : ""}',
+      description:
+          'Paused paper delivery${reason.isNotEmpty ? " ($reason)" : ""}',
       targetId: customerId,
       payload: {'pauseReason': reason},
     );
@@ -435,6 +489,33 @@ class DeliveryProvider extends ChangeNotifier {
               : 'Resumed Paper: $pubName',
         ),
       );
+
+      final matchingSub = current.subscriptions.firstWhere(
+        (s) => s.publicationId == publicationId,
+        orElse: () =>
+            SubscriptionItem(publicationId: publicationId, quantity: 1),
+      );
+
+      await recordNewspaperEvent(
+        eventType: newPausedState!
+            ? NewspaperEventType.paused
+            : NewspaperEventType.started,
+        customerId: current.id,
+        customerName: current.name,
+        houseNumber: current.houseNumber,
+        block: current.block,
+        area: current.area,
+        deliveryBoyId: current.deliveryBoyId,
+        deliveryBoyName: current.deliveryBoyName ??
+            getAssignedDeliveryBoyNameForCustomer(current),
+        newspaperName: pubName,
+        publicationId: publicationId,
+        quantity: matchingSub.quantity,
+        note: newPausedState!
+            ? 'Item Paused: $pubName'
+            : 'Item Resumed: $pubName',
+        skipSync: true,
+      );
     }
 
     _customers[index] = current.copyWith(
@@ -468,6 +549,7 @@ class DeliveryProvider extends ChangeNotifier {
 
   Future<void> saveCustomer(Customer customer) async {
     final index = _customers.indexWhere((c) => c.id == customer.id);
+    final isNew = index < 0;
     if (index >= 0) {
       _customers[index] = customer;
     } else {
@@ -475,6 +557,30 @@ class DeliveryProvider extends ChangeNotifier {
     }
     _customers.sort((a, b) => a.sequenceNo.compareTo(b.sequenceNo));
     await _storage.saveCustomers(_customers);
+
+    if (isNew) {
+      for (final sub in customer.subscriptions) {
+        final pub = getPublicationById(sub.publicationId);
+        final pubName = pub?.nameEn ?? sub.publicationId;
+        await recordNewspaperEvent(
+          eventType: NewspaperEventType.newStart,
+          customerId: customer.id,
+          customerName: customer.name,
+          houseNumber: customer.houseNumber,
+          block: customer.block,
+          area: customer.area,
+          deliveryBoyId: customer.deliveryBoyId,
+          deliveryBoyName: customer.deliveryBoyName ??
+              getAssignedDeliveryBoyNameForCustomer(customer),
+          newspaperName: pubName,
+          publicationId: sub.publicationId,
+          quantity: sub.quantity,
+          note: 'New Customer Started',
+          skipSync: true,
+        );
+      }
+    }
+
     notifyListeners();
     _triggerAutoSync();
     _recordDeliveryBoyAction(
@@ -501,6 +607,30 @@ class DeliveryProvider extends ChangeNotifier {
     }
     _customers.removeWhere((c) => c.id == customerId);
     await _storage.saveCustomers(_customers);
+
+    if (deletedCust != null) {
+      for (final sub in deletedCust.subscriptions) {
+        final pub = getPublicationById(sub.publicationId);
+        final pubName = pub?.nameEn ?? sub.publicationId;
+        await recordNewspaperEvent(
+          eventType: NewspaperEventType.deleted,
+          customerId: deletedCust.id,
+          customerName: deletedCust.name,
+          houseNumber: deletedCust.houseNumber,
+          block: deletedCust.block,
+          area: deletedCust.area,
+          deliveryBoyId: deletedCust.deliveryBoyId,
+          deliveryBoyName: deletedCust.deliveryBoyName ??
+              getAssignedDeliveryBoyNameForCustomer(deletedCust),
+          newspaperName: pubName,
+          publicationId: sub.publicationId,
+          quantity: sub.quantity,
+          note: 'Customer Removed',
+          skipSync: true,
+        );
+      }
+    }
+
     notifyListeners();
     _triggerAutoSync();
     _cloudService.deleteCustomerFromCloud(
@@ -616,6 +746,7 @@ class DeliveryProvider extends ChangeNotifier {
         customers: _customers,
         publications: _publications,
         users: _users,
+        events: _newspaperEvents,
       );
     } else if (forceDownload) {
       final download = await _cloudService.downloadAll(
@@ -632,6 +763,10 @@ class DeliveryProvider extends ChangeNotifier {
           _users = download.deliveryBoys!;
           await _storage.saveUsers(_users);
         }
+        if (download.events != null && download.events!.isNotEmpty) {
+          _newspaperEvents = download.events!;
+          await _storage.saveNewspaperEvents(_newspaperEvents);
+        }
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
       }
@@ -642,15 +777,18 @@ class DeliveryProvider extends ChangeNotifier {
         localCustomers: _customers,
         localPublications: _publications,
         localUsers: _users,
+        localEvents: _newspaperEvents,
       );
       result = syncRes.result;
       if (syncRes.result.success) {
         _customers = syncRes.customers;
         _publications = syncRes.publications;
         _users = syncRes.deliveryBoys;
+        _newspaperEvents = syncRes.events;
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
         await _storage.saveUsers(_users);
+        await _storage.saveNewspaperEvents(_newspaperEvents);
       }
     }
 
@@ -987,6 +1125,271 @@ class DeliveryProvider extends ChangeNotifier {
   Future<void> clearApprovalHistory() async {
     _approvalRequests.removeWhere((r) => !r.isPending);
     await _storage.saveApprovalRequests(_approvalRequests);
+    notifyListeners();
+  }
+
+  // ==========================================
+  // Newspaper Events & Breakdown Analytics
+  // ==========================================
+
+  Future<void> recordNewspaperEvent({
+    required NewspaperEventType eventType,
+    required String customerName,
+    String customerId = '',
+    String houseNumber = '',
+    String block = '',
+    required String area,
+    String? deliveryBoyId,
+    String? deliveryBoyName,
+    required String newspaperName,
+    String publicationId = '',
+    int quantity = 1,
+    DateTime? pauseStartDate,
+    DateTime? pauseEndDate,
+    String note = '',
+    bool skipSync = false,
+  }) async {
+    final boyId = (deliveryBoyId != null && deliveryBoyId.isNotEmpty)
+        ? deliveryBoyId
+        : (_currentUser?.id ?? '');
+    final boyName = (deliveryBoyName != null && deliveryBoyName.isNotEmpty)
+        ? deliveryBoyName
+        : (_currentUser?.name ?? '');
+
+    final event = NewspaperEvent(
+      id: 'evt_${DateTime.now().millisecondsSinceEpoch}_${_newspaperEvents.length + 1}',
+      eventType: eventType,
+      customerId: customerId,
+      customerName: customerName,
+      houseNumber: houseNumber,
+      block: block,
+      area: area,
+      deliveryBoyId: boyId,
+      deliveryBoyName: boyName,
+      newspaperName: newspaperName,
+      publicationId: publicationId,
+      quantity: quantity,
+      timestamp: DateTime.now(),
+      pauseStartDate: pauseStartDate,
+      pauseEndDate: pauseEndDate,
+      note: note,
+    );
+
+    _newspaperEvents = [event, ..._newspaperEvents];
+    await _storage.saveNewspaperEvents(_newspaperEvents);
+    if (!skipSync) {
+      notifyListeners();
+      _triggerAutoSync();
+    }
+  }
+
+  String getAssignedDeliveryBoyNameForCustomer(Customer customer) {
+    if (customer.deliveryBoyName != null &&
+        customer.deliveryBoyName!.trim().isNotEmpty) {
+      return customer.deliveryBoyName!.trim();
+    }
+    if (customer.deliveryBoyId != null &&
+        customer.deliveryBoyId!.trim().isNotEmpty) {
+      final boy = _users.firstWhere(
+        (u) => u.id == customer.deliveryBoyId,
+        orElse: () => const AppUser(
+          id: '',
+          name: '',
+          role: UserRole.deliveryBoy,
+          pin: '',
+        ),
+      );
+      if (boy.name.isNotEmpty) return boy.name;
+    }
+    // Match by area
+    final match = _users.firstWhere(
+      (u) =>
+          u.isDeliveryBoy &&
+          u.assignedArea.trim().isNotEmpty &&
+          u.assignedArea.toLowerCase() == customer.area.toLowerCase(),
+      orElse: () => const AppUser(
+        id: '',
+        name: '',
+        role: UserRole.deliveryBoy,
+        pin: '',
+      ),
+    );
+    if (match.name.isNotEmpty) return match.name;
+    return 'Not Assigned';
+  }
+
+  /// Returns customers belonging to a delivery boy (by ID or assigned area)
+  List<Customer> getCustomersForDeliveryBoy(String boyId) {
+    final boy = _users.firstWhere(
+      (u) => u.id == boyId,
+      orElse: () => const AppUser(
+        id: '',
+        name: '',
+        role: UserRole.deliveryBoy,
+        pin: '',
+      ),
+    );
+    return _customers.where((c) {
+      if (c.deliveryBoyId != null && c.deliveryBoyId!.isNotEmpty) {
+        return c.deliveryBoyId == boyId;
+      }
+      if (boy.assignedArea.isNotEmpty) {
+        return c.area.toLowerCase() == boy.assignedArea.toLowerCase();
+      }
+      return false;
+    }).toList();
+  }
+
+  /// Delivery Boy-wise Breakdown Summary
+  Map<String, dynamic> getDeliveryBoyBreakdown(String? boyId) {
+    final List<Customer> matchedCusts;
+    final List<NewspaperEvent> matchedEvents;
+
+    if (boyId == null || boyId.isEmpty) {
+      matchedCusts = _customers;
+      matchedEvents = _newspaperEvents;
+    } else {
+      matchedCusts = getCustomersForDeliveryBoy(boyId);
+      final boy = _users.firstWhere(
+        (u) => u.id == boyId,
+        orElse: () => const AppUser(
+          id: '',
+          name: '',
+          role: UserRole.deliveryBoy,
+          pin: '',
+        ),
+      );
+      matchedEvents = _newspaperEvents.where((e) {
+        if (e.deliveryBoyId.isNotEmpty && e.deliveryBoyId == boyId) return true;
+        if (boy.assignedArea.isNotEmpty &&
+            e.area.toLowerCase() == boy.assignedArea.toLowerCase()) {
+          return true;
+        }
+        return false;
+      }).toList();
+    }
+
+    int activeCopies = 0;
+    int pausedCopies = 0;
+    final pubCopies = <String, int>{};
+
+    for (final c in matchedCusts) {
+      final isStarted = c.isStartedOnDate(_selectedDate);
+      for (final s in c.subscriptions) {
+        final pub = getPublicationById(s.publicationId);
+        final pubName = pub?.nameEn ?? s.publicationId;
+        if (isStarted && !s.isPaused) {
+          activeCopies += s.quantity;
+          pubCopies[pubName] = (pubCopies[pubName] ?? 0) + s.quantity;
+        } else {
+          pausedCopies += s.quantity;
+        }
+      }
+    }
+
+    final newStartCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.newStart)
+        .length;
+    final startedCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.started)
+        .length;
+    final pausedCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.paused)
+        .length;
+    final deletedCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.deleted)
+        .length;
+
+    return {
+      'totalCustomers': matchedCusts.length,
+      'activeCopies': activeCopies,
+      'pausedCopies': pausedCopies,
+      'pubCopies': pubCopies,
+      'newStartCount': newStartCount,
+      'startedCount': startedCount,
+      'pausedCount': pausedCount,
+      'deletedCount': deletedCount,
+      'events': matchedEvents,
+    };
+  }
+
+  /// Area-wise Breakdown Summary
+  Map<String, dynamic> getAreaBreakdown(String? area, [String? block]) {
+    final List<Customer> matchedCusts;
+    final List<NewspaperEvent> matchedEvents;
+
+    if (area == null || area.isEmpty) {
+      matchedCusts = _customers;
+      matchedEvents = _newspaperEvents;
+    } else {
+      matchedCusts = _customers.where((c) {
+        if (c.area.toLowerCase() != area.toLowerCase()) return false;
+        if (block != null &&
+            block.isNotEmpty &&
+            c.block.toLowerCase() != block.toLowerCase()) {
+          return false;
+        }
+        return true;
+      }).toList();
+
+      matchedEvents = _newspaperEvents.where((e) {
+        if (e.area.toLowerCase() != area.toLowerCase()) return false;
+        if (block != null &&
+            block.isNotEmpty &&
+            e.block.toLowerCase() != block.toLowerCase()) {
+          return false;
+        }
+        return true;
+      }).toList();
+    }
+
+    int activeCopies = 0;
+    int pausedCopies = 0;
+    final pubCopies = <String, int>{};
+
+    for (final c in matchedCusts) {
+      final isStarted = c.isStartedOnDate(_selectedDate);
+      for (final s in c.subscriptions) {
+        final pub = getPublicationById(s.publicationId);
+        final pubName = pub?.nameEn ?? s.publicationId;
+        if (isStarted && !s.isPaused) {
+          activeCopies += s.quantity;
+          pubCopies[pubName] = (pubCopies[pubName] ?? 0) + s.quantity;
+        } else {
+          pausedCopies += s.quantity;
+        }
+      }
+    }
+
+    final newStartCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.newStart)
+        .length;
+    final startedCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.started)
+        .length;
+    final pausedCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.paused)
+        .length;
+    final deletedCount = matchedEvents
+        .where((e) => e.eventType == NewspaperEventType.deleted)
+        .length;
+
+    return {
+      'totalCustomers': matchedCusts.length,
+      'activeCopies': activeCopies,
+      'pausedCopies': pausedCopies,
+      'pubCopies': pubCopies,
+      'newStartCount': newStartCount,
+      'startedCount': startedCount,
+      'pausedCount': pausedCount,
+      'deletedCount': deletedCount,
+      'events': matchedEvents,
+    };
+  }
+
+  Future<void> clearNewspaperEvents() async {
+    _newspaperEvents.clear();
+    await _storage.saveNewspaperEvents(_newspaperEvents);
     notifyListeners();
   }
 }

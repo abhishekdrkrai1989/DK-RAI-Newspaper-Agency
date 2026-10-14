@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/app_user.dart';
 import '../models/customer.dart';
+import '../models/newspaper_event.dart';
 import '../models/publication.dart';
 
 class CloudSyncResult {
@@ -10,6 +11,7 @@ class CloudSyncResult {
   final int customersSynced;
   final int publicationsSynced;
   final int deliveryBoysSynced;
+  final int eventsSynced;
   final DateTime timestamp;
 
   const CloudSyncResult({
@@ -18,6 +20,7 @@ class CloudSyncResult {
     this.customersSynced = 0,
     this.publicationsSynced = 0,
     this.deliveryBoysSynced = 0,
+    this.eventsSynced = 0,
     required this.timestamp,
   });
 }
@@ -130,6 +133,7 @@ class CloudSyncService {
     required List<Customer> customers,
     required List<Publication> publications,
     List<AppUser> users = const [],
+    List<NewspaperEvent> events = const [],
   }) async {
     final cleanUrl = sanitizeUrl(url);
     if (cleanUrl.isEmpty || anonKey.trim().isEmpty) {
@@ -215,12 +219,33 @@ class CloudSyncService {
         }
       }
 
+      // 4. Upsert Newspaper Events (New start, started, paused, deleted)
+      int eventsSynced = 0;
+      if (events.isNotEmpty) {
+        try {
+          final eventsUri = Uri.parse('$cleanUrl/rest/v1/newspaper_events');
+          final eventRows = events.map((e) => e.toRow()).toList();
+          final eventRes = await _client
+              .post(
+                eventsUri,
+                headers: _headers(anonKey, upsert: true),
+                body: jsonEncode(eventRows),
+              )
+              .timeout(const Duration(seconds: 25));
+
+          if (eventRes.statusCode >= 200 && eventRes.statusCode < 300) {
+            eventsSynced = events.length;
+          }
+        } catch (_) {}
+      }
+
       return CloudSyncResult(
         success: true,
         message: 'Successfully backed up all data to Supabase Cloud DB!',
         customersSynced: customers.length,
         publicationsSynced: publications.length,
         deliveryBoysSynced: boysSynced,
+        eventsSynced: eventsSynced,
         timestamp: DateTime.now(),
       );
     } catch (e) {
@@ -232,11 +257,12 @@ class CloudSyncService {
     }
   }
 
-  /// Downloads all publications, customers, and delivery boys from Supabase Cloud DB
+  /// Downloads all publications, customers, delivery boys, and events from Supabase Cloud DB
   Future<({
     List<Customer>? customers,
     List<Publication>? publications,
     List<AppUser>? deliveryBoys,
+    List<NewspaperEvent>? events,
     CloudSyncResult result,
   })> downloadAll({
     required String url,
@@ -248,6 +274,7 @@ class CloudSyncService {
         customers: null,
         publications: null,
         deliveryBoys: null,
+        events: null,
         result: CloudSyncResult(
           success: false,
           message: 'Cloud database is not configured.',
@@ -268,6 +295,7 @@ class CloudSyncService {
           customers: null,
           publications: null,
           deliveryBoys: null,
+          events: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -295,6 +323,7 @@ class CloudSyncService {
           customers: null,
           publications: null,
           deliveryBoys: null,
+          events: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -324,18 +353,37 @@ class CloudSyncService {
         }
       } catch (_) {}
 
+      // 4. Fetch Newspaper Events (Delivery boy-wise, area-wise new start, paused, started, deleted)
+      List<NewspaperEvent>? remoteEvents;
+      try {
+        final eventsUri =
+            Uri.parse('$cleanUrl/rest/v1/newspaper_events?select=*');
+        final eventsRes = await _client
+            .get(eventsUri, headers: _headers(anonKey))
+            .timeout(const Duration(seconds: 15));
+        if (eventsRes.statusCode >= 200 && eventsRes.statusCode < 300) {
+          final eventsListRaw = jsonDecode(eventsRes.body) as List<dynamic>;
+          remoteEvents = eventsListRaw
+              .map((row) => NewspaperEvent.fromRow(row as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+
       final boysCount = remoteBoys?.length ?? 0;
+      final eventsCount = remoteEvents?.length ?? 0;
       return (
         customers: remoteCustomers,
         publications: remotePublications,
         deliveryBoys: remoteBoys,
+        events: remoteEvents,
         result: CloudSyncResult(
           success: true,
           message:
-              'Downloaded ${remoteCustomers.length} customers, ${remotePublications.length} publications & $boysCount hawkers from Supabase Cloud DB.',
+              'Downloaded ${remoteCustomers.length} homes, ${remotePublications.length} publications, $boysCount hawkers & $eventsCount events from Supabase.',
           customersSynced: remoteCustomers.length,
           publicationsSynced: remotePublications.length,
           deliveryBoysSynced: boysCount,
+          eventsSynced: eventsCount,
           timestamp: DateTime.now(),
         ),
       );
@@ -344,6 +392,7 @@ class CloudSyncService {
         customers: null,
         publications: null,
         deliveryBoys: null,
+        events: null,
         result: CloudSyncResult(
           success: false,
           message: 'Error downloading from cloud: $e',
@@ -358,6 +407,7 @@ class CloudSyncService {
     List<Customer> customers,
     List<Publication> publications,
     List<AppUser> deliveryBoys,
+    List<NewspaperEvent> events,
     CloudSyncResult result,
   })> syncTwoWay({
     required String url,
@@ -365,6 +415,7 @@ class CloudSyncService {
     required List<Customer> localCustomers,
     required List<Publication> localPublications,
     List<AppUser> localUsers = const [],
+    List<NewspaperEvent> localEvents = const [],
   }) async {
     final downloadResult =
         await downloadAll(url: url, anonKey: anonKey);
@@ -376,6 +427,7 @@ class CloudSyncService {
         customers: localCustomers,
         publications: localPublications,
         deliveryBoys: localUsers,
+        events: localEvents,
         result: downloadResult.result,
       );
     }
@@ -413,6 +465,19 @@ class CloudSyncService {
     }
     final mergedBoys = mergedBoysMap.values.toList();
 
+    // Merge Newspaper Events
+    final mergedEventsMap = <String, NewspaperEvent>{};
+    if (downloadResult.events != null) {
+      for (final e in downloadResult.events!) {
+        mergedEventsMap[e.id] = e;
+      }
+    }
+    for (final e in localEvents) {
+      mergedEventsMap[e.id] = e;
+    }
+    final mergedEvents = mergedEventsMap.values.toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
     // Upload merged state back to cloud so both sides are in sync
     final uploadResult = await uploadAll(
       url: url,
@@ -420,6 +485,7 @@ class CloudSyncService {
       customers: mergedCustomers,
       publications: mergedPublications,
       users: mergedBoys,
+      events: mergedEvents,
     );
 
     if (!uploadResult.success) {
@@ -427,6 +493,7 @@ class CloudSyncService {
         customers: mergedCustomers,
         publications: mergedPublications,
         deliveryBoys: mergedBoys,
+        events: mergedEvents,
         result: uploadResult,
       );
     }
@@ -435,13 +502,15 @@ class CloudSyncService {
       customers: mergedCustomers,
       publications: mergedPublications,
       deliveryBoys: mergedBoys,
+      events: mergedEvents,
       result: CloudSyncResult(
         success: true,
         message:
-            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications & ${mergedBoys.length} hawkers synchronized with Supabase.',
+            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications, ${mergedBoys.length} hawkers & ${mergedEvents.length} events synchronized with Supabase.',
         customersSynced: mergedCustomers.length,
         publicationsSynced: mergedPublications.length,
         deliveryBoysSynced: mergedBoys.length,
+        eventsSynced: mergedEvents.length,
         timestamp: DateTime.now(),
       ),
     );
@@ -462,6 +531,8 @@ class CloudSyncService {
       'pause_start_date': c.pauseStartDate?.toIso8601String(),
       'pause_end_date': c.pauseEndDate?.toIso8601String(),
       'pause_reason': c.pauseReason,
+      'delivery_boy_id': c.deliveryBoyId,
+      'delivery_boy_name': c.deliveryBoyName,
       'subscriptions': c.subscriptions.map((s) => s.toJson()).toList(),
       'delivered_dates': c.deliveredDates,
       'status_history': c.statusHistory.map((h) => h.toJson()).toList(),
@@ -494,6 +565,11 @@ class CloudSyncService {
     final pauseReason = (row['pause_reason'] as String?) ??
         (row['pauseReason'] as String?) ??
         '';
+
+    final deliveryBoyId = (row['delivery_boy_id'] as String?) ??
+        (row['deliveryBoyId'] as String?);
+    final deliveryBoyName = (row['delivery_boy_name'] as String?) ??
+        (row['deliveryBoyName'] as String?);
 
     final subsRaw = row['subscriptions'];
     List<SubscriptionItem> subs = [];
@@ -534,6 +610,8 @@ class CloudSyncService {
           pauseStartStr != null ? DateTime.tryParse(pauseStartStr) : null,
       pauseEndDate: pauseEndStr != null ? DateTime.tryParse(pauseEndStr) : null,
       pauseReason: pauseReason,
+      deliveryBoyId: deliveryBoyId ?? '',
+      deliveryBoyName: deliveryBoyName ?? '',
       subscriptions: subs,
       deliveredDates: deliveredDates,
       statusHistory: statusHistory,
@@ -726,6 +804,8 @@ create table if not exists customers (
   pause_start_date text,
   pause_end_date text,
   pause_reason text default '',
+  delivery_boy_id text default '',
+  delivery_boy_name text default '',
   subscriptions jsonb default '[]'::jsonb,
   delivered_dates jsonb default '[]'::jsonb,
   status_history jsonb default '[]'::jsonb,
@@ -747,12 +827,34 @@ create table if not exists delivery_boys (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 4. Enable Row Level Security (RLS)
+-- 4. Create Newspaper Events Table (Tracking New Start, Started, Paused, Deleted)
+create table if not exists newspaper_events (
+  id text primary key,
+  event_type text not null,
+  customer_id text default '',
+  customer_name text not null,
+  house_number text default '',
+  block text default '',
+  area text not null default '',
+  delivery_boy_id text default '',
+  delivery_boy_name text default '',
+  newspaper_name text not null,
+  publication_id text default '',
+  quantity integer default 1,
+  timestamp text not null,
+  pause_start_date text,
+  pause_end_date text,
+  note text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 5. Enable Row Level Security (RLS)
 alter table publications enable row level security;
 alter table customers enable row level security;
 alter table delivery_boys enable row level security;
+alter table newspaper_events enable row level security;
 
--- 5. Enable Public Anon API Access (Read & Write with Anon Key)
+-- 6. Enable Public Anon API Access (Read & Write with Anon Key)
 drop policy if exists "Allow all on publications for anon" on publications;
 create policy "Allow all on publications for anon"
   on publications for all
@@ -768,6 +870,12 @@ create policy "Allow all on customers for anon"
 drop policy if exists "Allow all on delivery_boys for anon" on delivery_boys;
 create policy "Allow all on delivery_boys for anon"
   on delivery_boys for all
+  using (true)
+  with check (true);
+
+drop policy if exists "Allow all on newspaper_events for anon" on newspaper_events;
+create policy "Allow all on newspaper_events for anon"
+  on newspaper_events for all
   using (true)
   with check (true);
 ''';

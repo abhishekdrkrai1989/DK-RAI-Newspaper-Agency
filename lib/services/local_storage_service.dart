@@ -3,6 +3,7 @@ import '../l10n/app_strings.dart';
 import '../models/app_user.dart';
 import '../models/approval_request.dart';
 import '../models/customer.dart';
+import '../models/newspaper_event.dart';
 import '../models/publication.dart';
 import 'storage_backend.dart';
 
@@ -18,6 +19,7 @@ class LocalStorageService {
   static const String _keyUsers = 'newspaper_app_users_v1';
   static const String _keyCurrentUser = 'newspaper_app_current_user_v1';
   static const String _keyApprovalRequests = 'newspaper_app_approval_requests_v1';
+  static const String _keyNewspaperEvents = 'newspaper_app_events_v1';
 
   final StorageBackend _prefs;
 
@@ -143,6 +145,28 @@ class LocalStorageService {
     await _prefs.setString(_keyApprovalRequests, encoded);
   }
 
+  List<NewspaperEvent> loadNewspaperEvents() {
+    final raw = _prefs.getString(_keyNewspaperEvents);
+    if (raw == null || raw.isEmpty) {
+      return defaultNewspaperEvents();
+    }
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      final list = decoded
+          .map((item) => NewspaperEvent.fromJson(item as Map<String, dynamic>))
+          .toList();
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    } catch (_) {
+      return defaultNewspaperEvents();
+    }
+  }
+
+  Future<void> saveNewspaperEvents(List<NewspaperEvent> events) async {
+    final encoded = jsonEncode(events.map((e) => e.toJson()).toList());
+    await _prefs.setString(_keyNewspaperEvents, encoded);
+  }
+
   List<Publication> loadPublications() {
     final raw = _prefs.getString(_keyPublications);
     if (raw == null || raw.isEmpty) {
@@ -194,6 +218,7 @@ class LocalStorageService {
       await savePublications(pubs);
       final customers = defaultCustomers();
       await saveCustomers(customers);
+      await saveNewspaperEvents(defaultNewspaperEvents());
       await _prefs.setBool(_keySeeded, true);
     }
   }
@@ -201,6 +226,7 @@ class LocalStorageService {
   Future<void> resetToDemoData() async {
     await savePublications(defaultPublications());
     await saveCustomers(defaultCustomers());
+    await saveNewspaperEvents(defaultNewspaperEvents());
     await _prefs.setBool(_keySeeded, true);
   }
 
@@ -442,6 +468,126 @@ class LocalStorageService {
           ),
         ],
         notes: 'Keep in door holder / दरवाजे के होल्डर में रखें',
+      ),
+    ];
+  }
+
+  static List<NewspaperEvent> defaultNewspaperEvents() {
+    final now = DateTime.now();
+    return [
+      NewspaperEvent(
+        id: 'evt_1',
+        eventType: NewspaperEventType.newStart,
+        customerId: 'cust_1',
+        customerName: 'Rajesh Sharma / राजेश शर्मा',
+        houseNumber: 'A-101',
+        block: 'Block A',
+        area: 'Shanti Nagar Society',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'Dainik Jagran (दैनिक जागरण)',
+        publicationId: 'pub_jagran',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 15)),
+        note: 'New subscription started / नया अखबार शुरू किया',
+      ),
+      NewspaperEvent(
+        id: 'evt_2',
+        eventType: NewspaperEventType.newStart,
+        customerId: 'cust_2',
+        customerName: 'Amit Verma / अमित वर्मा',
+        houseNumber: 'A-104',
+        block: 'Block A',
+        area: 'Shanti Nagar Society',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'Amar Ujala (अमर उजाला)',
+        publicationId: 'pub_ujala',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 12)),
+        note: 'New customer subscribed',
+      ),
+      NewspaperEvent(
+        id: 'evt_3',
+        eventType: NewspaperEventType.paused,
+        customerId: 'cust_2',
+        customerName: 'Amit Verma / अमित वर्मा',
+        houseNumber: 'A-104',
+        block: 'Block A',
+        area: 'Shanti Nagar Society',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'Amar Ujala (अमर उजाला)',
+        publicationId: 'pub_ujala',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 1)),
+        pauseStartDate: now.subtract(const Duration(days: 1)),
+        pauseEndDate: now.add(const Duration(days: 4)),
+        note: 'Out of station with family / परिवार के साथ बाहर गए हैं',
+      ),
+      NewspaperEvent(
+        id: 'evt_4',
+        eventType: NewspaperEventType.newStart,
+        customerId: 'cust_3',
+        customerName: 'Dr. S. K. Gupta / डॉ. एस. के. गुप्ता',
+        houseNumber: 'B-12',
+        block: 'Block B',
+        area: 'Shanti Nagar Society',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'The Times of India',
+        publicationId: 'pub_toi',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 25)),
+        note: 'Clinic & Residence paper started',
+      ),
+      NewspaperEvent(
+        id: 'evt_5',
+        eventType: NewspaperEventType.paused,
+        customerId: 'cust_4',
+        customerName: 'Suresh Patel / सुरेश पटेल',
+        houseNumber: 'B-18',
+        block: 'Block B',
+        area: 'Green Park Colony',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'Dainik Bhaskar (दैनिक भास्कर)',
+        publicationId: 'pub_bhaskar',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 3)),
+        note: 'Paused until further notice / अगले आदेश तक बंद',
+      ),
+      NewspaperEvent(
+        id: 'evt_6',
+        eventType: NewspaperEventType.deleted,
+        customerId: 'cust_4',
+        customerName: 'Suresh Patel / सुरेश पटेल',
+        houseNumber: 'B-18',
+        block: 'Block B',
+        area: 'Green Park Colony',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'Dainik Jagran (दैनिक जागरण)',
+        publicationId: 'pub_jagran',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 10)),
+        note: 'Removed Newspaper: Dainik Jagran',
+      ),
+      NewspaperEvent(
+        id: 'evt_7',
+        eventType: NewspaperEventType.started,
+        customerId: 'cust_5',
+        customerName: 'Priya Nair / प्रिया नायर',
+        houseNumber: 'C-202',
+        block: 'Block C',
+        area: 'Sunrise Apartments',
+        deliveryBoyId: 'user_delivery_1',
+        deliveryBoyName: 'Ramesh Kumar (हॉकर)',
+        newspaperName: 'The Times of India',
+        publicationId: 'pub_toi',
+        quantity: 1,
+        timestamp: now.subtract(const Duration(days: 20)),
+        note: 'Started daily TOI + Weekend magazine',
       ),
     ];
   }
