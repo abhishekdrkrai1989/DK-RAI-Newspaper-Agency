@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../models/app_user.dart';
 import '../models/customer.dart';
 import '../models/publication.dart';
 
@@ -8,6 +9,7 @@ class CloudSyncResult {
   final String message;
   final int customersSynced;
   final int publicationsSynced;
+  final int deliveryBoysSynced;
   final DateTime timestamp;
 
   const CloudSyncResult({
@@ -15,6 +17,7 @@ class CloudSyncResult {
     required this.message,
     this.customersSynced = 0,
     this.publicationsSynced = 0,
+    this.deliveryBoysSynced = 0,
     required this.timestamp,
   });
 }
@@ -120,12 +123,13 @@ class CloudSyncService {
     }
   }
 
-  /// Uploads (upserts) all local publications and customers to Supabase Cloud DB
+  /// Uploads (upserts) all local publications, customers, and delivery boys to Supabase Cloud DB
   Future<CloudSyncResult> uploadAll({
     required String url,
     required String anonKey,
     required List<Customer> customers,
     required List<Publication> publications,
+    List<AppUser> users = const [],
   }) async {
     final cleanUrl = sanitizeUrl(url);
     if (cleanUrl.isEmpty || anonKey.trim().isEmpty) {
@@ -181,11 +185,42 @@ class CloudSyncService {
         }
       }
 
+      // 3. Upsert Delivery Boys / Hawkers
+      int boysSynced = 0;
+      if (users.isNotEmpty) {
+        final boysUri = Uri.parse('$cleanUrl/rest/v1/delivery_boys');
+        final boyRows = users.map((u) => _userToRow(u)).toList();
+        final boyRes = await _client
+            .post(
+              boysUri,
+              headers: _headers(anonKey, upsert: true),
+              body: jsonEncode(boyRows),
+            )
+            .timeout(const Duration(seconds: 20));
+
+        if (boyRes.statusCode >= 200 && boyRes.statusCode < 300) {
+          boysSynced = users.length;
+        } else if (boyRes.statusCode == 404 ||
+            boyRes.body.contains('PGRST204') ||
+            boyRes.body.contains('delivery_boys') &&
+                boyRes.body.contains('does not exist')) {
+          // Table does not exist yet on remote Supabase; skip without failing customers sync
+        } else {
+          return CloudSyncResult(
+            success: false,
+            message:
+                'Failed to upload delivery boys (HTTP ${boyRes.statusCode}): ${boyRes.body}',
+            timestamp: DateTime.now(),
+          );
+        }
+      }
+
       return CloudSyncResult(
         success: true,
         message: 'Successfully backed up all data to Supabase Cloud DB!',
         customersSynced: customers.length,
         publicationsSynced: publications.length,
+        deliveryBoysSynced: boysSynced,
         timestamp: DateTime.now(),
       );
     } catch (e) {
@@ -197,9 +232,13 @@ class CloudSyncService {
     }
   }
 
-  /// Downloads all publications and customers from Supabase Cloud DB
-  Future<({List<Customer>? customers, List<Publication>? publications, CloudSyncResult result})>
-      downloadAll({
+  /// Downloads all publications, customers, and delivery boys from Supabase Cloud DB
+  Future<({
+    List<Customer>? customers,
+    List<Publication>? publications,
+    List<AppUser>? deliveryBoys,
+    CloudSyncResult result,
+  })> downloadAll({
     required String url,
     required String anonKey,
   }) async {
@@ -208,6 +247,7 @@ class CloudSyncService {
       return (
         customers: null,
         publications: null,
+        deliveryBoys: null,
         result: CloudSyncResult(
           success: false,
           message: 'Cloud database is not configured.',
@@ -227,6 +267,7 @@ class CloudSyncService {
         return (
           customers: null,
           publications: null,
+          deliveryBoys: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -253,6 +294,7 @@ class CloudSyncService {
         return (
           customers: null,
           publications: null,
+          deliveryBoys: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -267,15 +309,33 @@ class CloudSyncService {
           .map((row) => _rowToCustomer(row as Map<String, dynamic>))
           .toList();
 
+      // 3. Fetch Delivery Boys
+      List<AppUser>? remoteBoys;
+      try {
+        final boysUri = Uri.parse('$cleanUrl/rest/v1/delivery_boys?select=*');
+        final boysRes = await _client
+            .get(boysUri, headers: _headers(anonKey))
+            .timeout(const Duration(seconds: 15));
+        if (boysRes.statusCode >= 200 && boysRes.statusCode < 300) {
+          final boysListRaw = jsonDecode(boysRes.body) as List<dynamic>;
+          remoteBoys = boysListRaw
+              .map((row) => _rowToUser(row as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+
+      final boysCount = remoteBoys?.length ?? 0;
       return (
         customers: remoteCustomers,
         publications: remotePublications,
+        deliveryBoys: remoteBoys,
         result: CloudSyncResult(
           success: true,
           message:
-              'Downloaded ${remoteCustomers.length} customers and ${remotePublications.length} publications from Supabase Cloud DB.',
+              'Downloaded ${remoteCustomers.length} customers, ${remotePublications.length} publications & $boysCount hawkers from Supabase Cloud DB.',
           customersSynced: remoteCustomers.length,
           publicationsSynced: remotePublications.length,
+          deliveryBoysSynced: boysCount,
           timestamp: DateTime.now(),
         ),
       );
@@ -283,6 +343,7 @@ class CloudSyncService {
       return (
         customers: null,
         publications: null,
+        deliveryBoys: null,
         result: CloudSyncResult(
           success: false,
           message: 'Error downloading from cloud: $e',
@@ -293,12 +354,17 @@ class CloudSyncService {
   }
 
   /// Two-way sync: Merges local and cloud records, then uploads any missing/newer records
-  Future<({List<Customer> customers, List<Publication> publications, CloudSyncResult result})>
-      syncTwoWay({
+  Future<({
+    List<Customer> customers,
+    List<Publication> publications,
+    List<AppUser> deliveryBoys,
+    CloudSyncResult result,
+  })> syncTwoWay({
     required String url,
     required String anonKey,
     required List<Customer> localCustomers,
     required List<Publication> localPublications,
+    List<AppUser> localUsers = const [],
   }) async {
     final downloadResult =
         await downloadAll(url: url, anonKey: anonKey);
@@ -309,6 +375,7 @@ class CloudSyncService {
       return (
         customers: localCustomers,
         publications: localPublications,
+        deliveryBoys: localUsers,
         result: downloadResult.result,
       );
     }
@@ -334,18 +401,32 @@ class CloudSyncService {
     final mergedCustomers = mergedCustMap.values.toList()
       ..sort((a, b) => a.sequenceNo.compareTo(b.sequenceNo));
 
+    // Merge Delivery Boys
+    final mergedBoysMap = <String, AppUser>{};
+    if (downloadResult.deliveryBoys != null) {
+      for (final b in downloadResult.deliveryBoys!) {
+        mergedBoysMap[b.id] = b;
+      }
+    }
+    for (final b in localUsers) {
+      mergedBoysMap[b.id] = b; // Local takes priority if modified
+    }
+    final mergedBoys = mergedBoysMap.values.toList();
+
     // Upload merged state back to cloud so both sides are in sync
     final uploadResult = await uploadAll(
       url: url,
       anonKey: anonKey,
       customers: mergedCustomers,
       publications: mergedPublications,
+      users: mergedBoys,
     );
 
     if (!uploadResult.success) {
       return (
         customers: mergedCustomers,
         publications: mergedPublications,
+        deliveryBoys: mergedBoys,
         result: uploadResult,
       );
     }
@@ -353,12 +434,14 @@ class CloudSyncService {
     return (
       customers: mergedCustomers,
       publications: mergedPublications,
+      deliveryBoys: mergedBoys,
       result: CloudSyncResult(
         success: true,
         message:
-            'Two-way sync complete: ${mergedCustomers.length} homes & ${mergedPublications.length} publications synchronized with Supabase.',
+            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications & ${mergedBoys.length} hawkers synchronized with Supabase.',
         customersSynced: mergedCustomers.length,
         publicationsSynced: mergedPublications.length,
+        deliveryBoysSynced: mergedBoys.length,
         timestamp: DateTime.now(),
       ),
     );
@@ -510,6 +593,70 @@ class CloudSyncService {
     );
   }
 
+  Map<String, dynamic> _userToRow(AppUser u) {
+    return {
+      'id': u.id,
+      'name': u.name,
+      'role': u.role.name,
+      'pin': u.pin,
+      'phone': u.phone,
+      'assigned_area': u.assignedArea,
+      'is_active': u.isActive,
+      'vehicle_number': u.vehicleNumber,
+      'notes': u.notes,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+  }
+
+  AppUser _rowToUser(Map<String, dynamic> row) {
+    final id = (row['id'] as String?) ?? '';
+    final name = (row['name'] as String?) ?? '';
+    final roleStr = (row['role'] as String?) ?? 'deliveryBoy';
+    final role = roleStr == 'owner' ? UserRole.owner : UserRole.deliveryBoy;
+    final pin = (row['pin'] as String?) ?? '0000';
+    final phone = (row['phone'] as String?) ?? '';
+    final assignedArea = (row['assigned_area'] as String?) ??
+        (row['assignedArea'] as String?) ??
+        '';
+    final isActive = (row['is_active'] as bool?) ??
+        (row['isActive'] as bool?) ??
+        true;
+    final vehicleNumber = (row['vehicle_number'] as String?) ??
+        (row['vehicleNumber'] as String?) ??
+        '';
+    final notes = (row['notes'] as String?) ?? '';
+
+    return AppUser(
+      id: id,
+      name: name,
+      role: role,
+      pin: pin,
+      phone: phone,
+      assignedArea: assignedArea,
+      isActive: isActive,
+      vehicleNumber: vehicleNumber,
+      notes: notes,
+    );
+  }
+
+  Future<bool> deleteDeliveryBoyFromCloud({
+    required String url,
+    required String anonKey,
+    required String boyId,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse('$cleanUrl/rest/v1/delivery_boys?id=eq.$boyId');
+      final res = await _client
+          .delete(uri, headers: _headers(anonKey))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Copyable PostgreSQL SQL script for Supabase SQL Editor
   static String get sqlSetupScript => '''
 -- ==============================================================
@@ -549,11 +696,26 @@ create table if not exists customers (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 3. Enable Row Level Security (RLS)
+-- 3. Create Delivery Boys / Hawkers Table (Profiles & Credentials)
+create table if not exists delivery_boys (
+  id text primary key,
+  name text not null,
+  role text not null default 'deliveryBoy',
+  pin text not null default '0000',
+  phone text default '',
+  assigned_area text default '',
+  is_active boolean default true,
+  vehicle_number text default '',
+  notes text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 4. Enable Row Level Security (RLS)
 alter table publications enable row level security;
 alter table customers enable row level security;
+alter table delivery_boys enable row level security;
 
--- 4. Enable Public Anon API Access (Read & Write with Anon Key)
+-- 5. Enable Public Anon API Access (Read & Write with Anon Key)
 drop policy if exists "Allow all on publications for anon" on publications;
 create policy "Allow all on publications for anon"
   on publications for all
@@ -563,6 +725,12 @@ create policy "Allow all on publications for anon"
 drop policy if exists "Allow all on customers for anon" on customers;
 create policy "Allow all on customers for anon"
   on customers for all
+  using (true)
+  with check (true);
+
+drop policy if exists "Allow all on delivery_boys for anon" on delivery_boys;
+create policy "Allow all on delivery_boys for anon"
+  on delivery_boys for all
   using (true)
   with check (true);
 ''';

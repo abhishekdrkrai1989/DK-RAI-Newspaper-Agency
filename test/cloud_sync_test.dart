@@ -23,9 +23,11 @@ void main() {
       final sql = CloudSyncService.sqlSetupScript;
       expect(sql.contains('create table if not exists publications'), isTrue);
       expect(sql.contains('create table if not exists customers'), isTrue);
+      expect(sql.contains('create table if not exists delivery_boys'), isTrue);
       expect(sql.contains('enable row level security'), isTrue);
       expect(sql.contains('Allow all on publications for anon'), isTrue);
       expect(sql.contains('Allow all on customers for anon'), isTrue);
+      expect(sql.contains('Allow all on delivery_boys for anon'), isTrue);
     });
 
     test('testConnection fails gracefully on empty credentials', () async {

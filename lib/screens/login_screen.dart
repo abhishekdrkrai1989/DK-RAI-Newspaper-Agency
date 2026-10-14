@@ -271,21 +271,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
-                                          isOwnerRole
-                                              ? s.roleOwner
-                                              : s.roleDeliveryBoy,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 15,
-                                            color: isSelected
-                                                ? (isOwnerRole
-                                                    ? const Color(0xFF3730A3)
-                                                    : const Color(0xFF065F46))
-                                                : const Color(0xFF1E293B),
+                                        Expanded(
+                                          child: Text(
+                                            isOwnerRole
+                                                ? s.roleOwner
+                                                : s.roleDeliveryBoy,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                              color: isSelected
+                                                  ? (isOwnerRole
+                                                      ? const Color(0xFF3730A3)
+                                                      : const Color(0xFF065F46))
+                                                  : const Color(0xFF1E293B),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        const Spacer(),
+                                        const SizedBox(width: 8),
                                         Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 8,
@@ -299,13 +302,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                               color: Colors.grey.shade300,
                                             ),
                                           ),
-                                          child: Text(
-                                            'PIN: ${u.pin}',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: Colors.grey.shade700,
-                                            ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.lock_outline,
+                                                size: 11,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                s.tr('PIN Protected', 'पिन सुरक्षित'),
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Colors.grey.shade700,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
@@ -442,13 +456,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           decoration: InputDecoration(
                             counterText: '',
-                            hintText: _selectedUser?.isOwner == true
-                                ? s.pinHintOwner
-                                : s.pinHintDelivery,
+                            hintText: '••••',
                             hintStyle: TextStyle(
-                              fontSize: 14,
-                              letterSpacing: 0,
-                              fontWeight: FontWeight.normal,
+                              fontSize: 22,
+                              letterSpacing: 8,
+                              fontWeight: FontWeight.bold,
                               color: Colors.grey.shade400,
                             ),
                             filled: true,

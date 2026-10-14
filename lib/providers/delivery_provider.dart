@@ -602,6 +602,7 @@ class DeliveryProvider extends ChangeNotifier {
         anonKey: _supabaseAnonKey,
         customers: _customers,
         publications: _publications,
+        users: _users,
       );
     } else if (forceDownload) {
       final download = await _cloudService.downloadAll(
@@ -614,6 +615,10 @@ class DeliveryProvider extends ChangeNotifier {
           download.publications != null) {
         _customers = download.customers!;
         _publications = download.publications!;
+        if (download.deliveryBoys != null && download.deliveryBoys!.isNotEmpty) {
+          _users = download.deliveryBoys!;
+          await _storage.saveUsers(_users);
+        }
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
       }
@@ -623,13 +628,16 @@ class DeliveryProvider extends ChangeNotifier {
         anonKey: _supabaseAnonKey,
         localCustomers: _customers,
         localPublications: _publications,
+        localUsers: _users,
       );
       result = syncRes.result;
       if (syncRes.result.success) {
         _customers = syncRes.customers;
         _publications = syncRes.publications;
+        _users = syncRes.deliveryBoys;
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
+        await _storage.saveUsers(_users);
       }
     }
 
@@ -711,6 +719,7 @@ class DeliveryProvider extends ChangeNotifier {
       }
       await _storage.saveUsers(_users);
       notifyListeners();
+      _triggerAutoSync();
     }
   }
 
@@ -733,6 +742,7 @@ class DeliveryProvider extends ChangeNotifier {
     }
     await _storage.saveUsers(_users);
     notifyListeners();
+    _triggerAutoSync();
   }
 
   Future<bool> deleteDeliveryBoy(String boyId) async {
@@ -749,6 +759,12 @@ class DeliveryProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    _triggerAutoSync();
+    _cloudService.deleteDeliveryBoyFromCloud(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
+      boyId: boyId,
+    ).catchError((_) => false);
     return true;
   }
 
@@ -763,6 +779,7 @@ class DeliveryProvider extends ChangeNotifier {
     }
     await _storage.saveUsers(_users);
     notifyListeners();
+    _triggerAutoSync();
   }
 
   Future<void> _recordDeliveryBoyAction({

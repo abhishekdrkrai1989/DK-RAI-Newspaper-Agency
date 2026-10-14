@@ -333,8 +333,8 @@ class AppStrings {
         'ग्राहक व अखबार जोड़ें/हटाएं, पेपर चालू या बंद करें',
       );
   String get enterPinLabel => tr('Enter 4-Digit PIN', '4 अंकों का पिन दर्ज करें');
-  String get pinHintOwner => tr('Default PIN: 1234', 'डिफ़ॉल्ट पिन: 1234');
-  String get pinHintDelivery => tr('Default PIN: 0000', 'डिफ़ॉल्ट पिन: 0000');
+  String get pinHintOwner => tr('••••', '••••');
+  String get pinHintDelivery => tr('••••', '••••');
   String get loginBtn => tr('Login', 'लॉगिन करें');
   String get quickDemoLogin => tr('Instant Login (No PIN)', 'त्वरित लॉगिन (बिना पिन)');
   String get logoutBtn => tr('Logout / Switch Role', 'लॉगआउट / पद बदलें');
