@@ -362,4 +362,58 @@ class AppStrings {
         'Logged in as Delivery Boy. All start/stop & customer changes are submitted for Owner approval.',
         'डिलीवरी बॉय के रूप में लॉगिन। सभी बदलाव मालिक की मंज़ूरी के लिए दर्ज होते हैं।',
       );
+
+  // Delivery Boys Management
+  String get manageDeliveryBoysTitle =>
+      tr('Delivery Boys Management', 'हॉकर (डिलीवरी बॉय) प्रबंधन');
+  String get addDeliveryBoy =>
+      tr('Add New Delivery Boy', 'नया डिलीवरी बॉय जोड़ें');
+  String get editDeliveryBoy =>
+      tr('Edit Delivery Boy Details', 'डिलीवरी बॉय विवरण बदलें');
+  String get deliveryBoyName =>
+      tr('Delivery Boy Name', 'हॉकर (डिलीवरी बॉय) का नाम');
+  String get deliveryBoyNameHint =>
+      tr('e.g., Ramesh Kumar', 'उदा. रमेश कुमार');
+  String get deliveryBoyPhone =>
+      tr('Mobile / Phone Number', 'मोबाइल नंबर');
+  String get deliveryBoyPhoneHint =>
+      tr('e.g., 9876543210', 'उदा. 9876543210');
+  String get deliveryBoyPin =>
+      tr('Login PIN (4-Digits)', 'लॉगिन पिन (4 अंक)');
+  String get deliveryBoyPinHint =>
+      tr('e.g., 0000', 'उदा. 0000');
+  String get assignedAreaRoute =>
+      tr('Assigned Area / Society / Block', 'निर्धारित क्षेत्र / सोसाइटी / ब्लॉक');
+  String get assignedAreaHint =>
+      tr('e.g., Block A, Shanti Nagar', 'उदा. ब्लॉक A, शांति नगर सोसाइटी');
+  String get vehicleNumber =>
+      tr('Vehicle / Bicycle Details', 'वाहन / साइकिल का नंबर');
+  String get vehicleNumberHint =>
+      tr('e.g., Hero Splendor (UP 65 AB 1234)', 'उदा. हीरो स्प्लेंडर (UP 65 AB 1234)');
+  String get deliveryBoyNotes =>
+      tr('Shift / Route Notes', 'शिफ्ट या रूट नोट्स');
+  String get deliveryBoyNotesHint =>
+      tr('e.g., Morning Shift: 5:30 AM - 7:00 AM', 'उदा. सुबह 5:30 से 7:00 बजे तक');
+  String get statusActive => tr('Active', 'सक्रिय');
+  String get statusInactive => tr('Inactive', 'निष्क्रिय (ब्लॉक)');
+  String get activeStatusToggle =>
+      tr('Allow App Login (Active)', 'ऐप लॉगिन की अनुमति दें (सक्रिय)');
+  String get deleteDeliveryBoyConfirm =>
+      tr('Are you sure you want to remove this delivery boy?', 'क्या आप वाकई इस डिलीवरी बॉय को हटाना चाहते हैं?');
+  String get deliveryBoySavedSuccess =>
+      tr('Delivery boy details saved successfully!', 'डिलीवरी बॉय की जानकारी सफलतापूर्वक सहेज ली गई!');
+  String get deliveryBoyDeletedSuccess =>
+      tr('Delivery boy removed successfully!', 'डिलीवरी बॉय सफलतापूर्वक हटा दिया गया!');
+  String get cannotDeleteOwner =>
+      tr('Owner account cannot be deleted.', 'मालिक (एडमिन) का खाता हटाया नहीं जा सकता।');
+  String get noDeliveryBoysFound =>
+      tr('No delivery boys added yet. Tap + to add.', 'अभी तक कोई डिलीवरी बॉय नहीं जोड़ा गया है। नया जोड़ने के लिए + दबाएं।');
+  String get deliveryBoyInactiveMsg =>
+      tr('This account is inactive. Please contact the Owner.', 'यह खाता निष्क्रिय है। कृपया मालिक से संपर्क करें।');
+  String get totalDeliveryBoys => tr('Total Hawkers', 'कुल हॉकर');
+  String get activeHawkers => tr('Active', 'सक्रिय');
+  String get inactiveHawkers => tr('Inactive', 'निष्क्रिय');
+  String get generatePinBtn => tr('Generate PIN', 'पिन बनाएं');
+  String get ownerOnlyAccess =>
+      tr('Only Owner (Admin) can manage delivery boys.', 'केवल मालिक (एडमिन) ही डिलीवरी बॉय का प्रबंधन कर सकते हैं।');
 }

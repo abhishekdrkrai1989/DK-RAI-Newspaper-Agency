@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
-import '../models/app_user.dart';
 import '../models/customer.dart';
 import '../models/publication.dart';
 import '../providers/delivery_provider.dart';
@@ -10,6 +9,7 @@ import 'block_wise_consumption_screen.dart';
 import 'cloud_sync_screen.dart';
 import 'customer_detail_screen.dart';
 import 'customer_form_screen.dart';
+import 'delivery_boys_screen.dart';
 import 'login_screen.dart';
 import 'monthly_billing_report_screen.dart';
 import 'morning_delivery_list_screen.dart';
@@ -161,7 +161,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: p.toggleLanguage,
                 ),
               ),
-              if (p.isOwner)
+              if (p.isOwner) ...[
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
+                  tooltip: s.manageDeliveryBoysTitle,
+                  icon: const Icon(Icons.two_wheeler, color: Colors.amberAccent),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DeliveryBoysScreen(provider: p),
+                      ),
+                    );
+                  },
+                ),
                 Stack(
                   alignment: Alignment.center,
                   children: [
@@ -205,6 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                   ],
                 ),
+              ],
               IconButton(
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.all(6),
@@ -915,6 +929,39 @@ class _HomeScreenState extends State<HomeScreen> {
                               );
                             },
                           ),
+                          if (p.isOwner) ...[
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF065F46),
+                                foregroundColor: Colors.white,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.two_wheeler, size: 16),
+                              label: Text(
+                                '${s.tr("Hawkers", "हॉकर")} (${p.deliveryBoys.length})',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        DeliveryBoysScreen(provider: p),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1071,7 +1118,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 8),
-              if (p.isOwner)
+              if (p.isOwner) ...[
                 ListTile(
                   leading: const Icon(Icons.approval, color: Color(0xFFD97706)),
                   title: Text(s.approvalsTitle),
@@ -1101,6 +1148,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
+                ListTile(
+                  leading: const Icon(Icons.two_wheeler, color: Color(0xFF059669)),
+                  title: Text(s.manageDeliveryBoysTitle),
+                  subtitle: Text(
+                    '${p.deliveryBoys.length} ${s.tr("Delivery Boys", "हॉकर")}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DeliveryBoysScreen(provider: p),
+                      ),
+                    );
+                  },
+                ),
+              ],
               // Switch role buttons
               ...p.allUsers.map((user) {
                 final isCurrent = user.id == p.currentUser?.id;

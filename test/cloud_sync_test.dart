@@ -1,6 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:newspaper_delivery_app/models/customer.dart';
-import 'package:newspaper_delivery_app/models/publication.dart';
 import 'package:newspaper_delivery_app/providers/delivery_provider.dart';
 import 'package:newspaper_delivery_app/services/cloud_sync_service.dart';
 import 'package:newspaper_delivery_app/services/local_storage_service.dart';

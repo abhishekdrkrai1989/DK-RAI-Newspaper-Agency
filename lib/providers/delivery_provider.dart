@@ -55,14 +55,20 @@ class DeliveryProvider extends ChangeNotifier {
     }
     _autoSync = _storage.loadAutoSync();
     _lastSyncTime = _storage.loadLastSyncTime();
-    _users = _storage.loadUsers();
+    _users = List<AppUser>.from(_storage.loadUsers());
     _currentUser = _storage.loadCurrentUser();
     _approvalRequests = _storage.loadApprovalRequests();
 
     // Automatically connect and sync with Supabase cloud DB on launch
     if (isCloudConfigured && _autoSync) {
       Future.delayed(const Duration(milliseconds: 300), () {
-        syncWithCloud().catchError((_) => null);
+        syncWithCloud().catchError(
+          (_) => CloudSyncResult(
+            success: false,
+            message: 'Startup sync skipped',
+            timestamp: DateTime.now(),
+          ),
+        );
       });
     }
   }
@@ -654,12 +660,18 @@ class DeliveryProvider extends ChangeNotifier {
   // Role Authentication & Approvals Management
   // ==========================================
 
+  List<AppUser> get deliveryBoys =>
+      _users.where((u) => u.isDeliveryBoy).toList();
+
   Future<bool> login(String userId, String pin) async {
     final user = _users.firstWhere(
       (u) => u.id == userId,
       orElse: () => const AppUser(id: '', name: '', role: UserRole.deliveryBoy, pin: ''),
     );
     if (user.id.isNotEmpty && user.pin == pin) {
+      if (!user.isActive && !user.isOwner) {
+        return false;
+      }
       _currentUser = user;
       await _storage.saveCurrentUser(_currentUser);
       notifyListeners();
@@ -677,6 +689,51 @@ class DeliveryProvider extends ChangeNotifier {
   Future<void> switchUser(AppUser user) async {
     _currentUser = user;
     await _storage.saveCurrentUser(user);
+    notifyListeners();
+  }
+
+  Future<void> saveDeliveryBoy(AppUser boy) async {
+    final index = _users.indexWhere((u) => u.id == boy.id);
+    if (index >= 0) {
+      _users[index] = boy;
+      if (_currentUser?.id == boy.id) {
+        _currentUser = boy;
+        await _storage.saveCurrentUser(_currentUser);
+      }
+    } else {
+      _users.add(boy);
+    }
+    await _storage.saveUsers(_users);
+    notifyListeners();
+  }
+
+  Future<bool> deleteDeliveryBoy(String boyId) async {
+    final index = _users.indexWhere((u) => u.id == boyId);
+    if (index == -1) return false;
+    if (_users[index].isOwner) return false;
+
+    _users.removeAt(index);
+    await _storage.saveUsers(_users);
+
+    if (_currentUser?.id == boyId) {
+      _currentUser = _users.firstWhere((u) => u.isOwner, orElse: () => _users.first);
+      await _storage.saveCurrentUser(_currentUser);
+    }
+
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> toggleDeliveryBoyActive(String boyId) async {
+    final index = _users.indexWhere((u) => u.id == boyId);
+    if (index == -1) return;
+    final current = _users[index];
+    _users[index] = current.copyWith(isActive: !current.isActive);
+    if (_currentUser?.id == boyId) {
+      _currentUser = _users[index];
+      await _storage.saveCurrentUser(_currentUser);
+    }
+    await _storage.saveUsers(_users);
     notifyListeners();
   }
 

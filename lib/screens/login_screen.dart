@@ -57,6 +57,13 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
+    if (!user.isActive && !user.isOwner) {
+      setState(() {
+        _errorMessage = widget.provider.strings.deliveryBoyInactiveMsg;
+      });
+      return;
+    }
+
     final success = await widget.provider.login(user.id, pinToTry);
     if (!mounted) return;
 
@@ -304,14 +311,72 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ],
                                     ),
                                     const SizedBox(height: 2),
-                                    Text(
-                                      u.name,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey.shade600,
-                                      ),
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            u.name,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: u.isActive
+                                                  ? Colors.grey.shade800
+                                                  : Colors.grey.shade500,
+                                            ),
+                                          ),
+                                        ),
+                                        if (!u.isActive) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 1,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF2F2),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: const Color(0xFFFCA5A5),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              s.statusInactive,
+                                              style: const TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFFDC2626),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
+                                    if (u.assignedArea.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.place,
+                                            size: 11,
+                                            color: Color(0xFF059669),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Flexible(
+                                            child: Text(
+                                              u.assignedArea,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w500,
+                                                color: Color(0xFF047857),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                     const SizedBox(height: 4),
                                     Text(
                                       isOwnerRole

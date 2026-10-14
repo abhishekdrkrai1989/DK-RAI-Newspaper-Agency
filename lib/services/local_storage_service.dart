@@ -85,7 +85,7 @@ class LocalStorageService {
   List<AppUser> loadUsers() {
     final raw = _prefs.getString(_keyUsers);
     if (raw == null || raw.isEmpty) {
-      return AppUser.defaultUsers();
+      return List<AppUser>.from(AppUser.defaultUsers());
     }
     try {
       final decoded = jsonDecode(raw) as List<dynamic>;
@@ -93,7 +93,7 @@ class LocalStorageService {
           .map((item) => AppUser.fromJson(item as Map<String, dynamic>))
           .toList();
     } catch (_) {
-      return AppUser.defaultUsers();
+      return List<AppUser>.from(AppUser.defaultUsers());
     }
   }
 
