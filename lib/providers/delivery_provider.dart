@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../l10n/app_strings.dart';
 import '../models/app_user.dart';
@@ -33,6 +34,7 @@ class DeliveryProvider extends ChangeNotifier {
   bool _isSyncing = false;
   String? _lastSyncMessage;
   bool _lastSyncSuccess = true;
+  bool _pendingAutoSync = false;
 
   DistributionFilter _filter = DistributionFilter.all;
   String? _selectedArea; // Society / Colony filter
@@ -501,6 +503,11 @@ class DeliveryProvider extends ChangeNotifier {
     await _storage.saveCustomers(_customers);
     notifyListeners();
     _triggerAutoSync();
+    _cloudService.deleteCustomerFromCloud(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
+      customerId: customerId,
+    ).catchError((_) => false);
     _recordDeliveryBoyAction(
       actionType: ApprovalActionType.deleteCustomer,
       title: 'Customer Deleted: $custName',
@@ -537,6 +544,11 @@ class DeliveryProvider extends ChangeNotifier {
     await _storage.savePublications(_publications);
     notifyListeners();
     _triggerAutoSync();
+    _cloudService.deletePublicationFromCloud(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
+      publicationId: publicationId,
+    ).catchError((_) => false);
     _recordDeliveryBoyAction(
       actionType: ApprovalActionType.deletePublication,
       title: 'Paper Deleted: $pubName',
@@ -551,6 +563,7 @@ class DeliveryProvider extends ChangeNotifier {
     _publications = _storage.loadPublications();
     _customers = _storage.loadCustomers();
     notifyListeners();
+    _triggerAutoSync();
   }
 
   // --- Cloud Sync (Supabase Free Cloud DB) ---
@@ -649,19 +662,36 @@ class DeliveryProvider extends ChangeNotifier {
       await _storage.saveLastSyncTime(_lastSyncTime!);
     }
     notifyListeners();
+
+    if (_pendingAutoSync) {
+      _executeAutoSync();
+    }
+
     return result;
   }
 
   void _triggerAutoSync() {
-    if (_autoSync && isCloudConfigured && !_isSyncing) {
-      syncWithCloud(forceUpload: true).catchError(
-        (_) => CloudSyncResult(
-          success: false,
-          message: 'Auto-sync failed',
-          timestamp: DateTime.now(),
-        ),
-      );
+    if (!_autoSync || !isCloudConfigured) return;
+    if (_isSyncing) {
+      _pendingAutoSync = true;
+      return;
     }
+    _executeAutoSync();
+  }
+
+  Future<void> _executeAutoSync() async {
+    _pendingAutoSync = false;
+    try {
+      await syncWithCloud(forceUpload: true);
+    } catch (_) {}
+    if (_pendingAutoSync) {
+      _executeAutoSync();
+    }
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   // ==========================================
@@ -823,6 +853,7 @@ class DeliveryProvider extends ChangeNotifier {
     _approvalRequests[index] = updated;
     await _storage.saveApprovalRequests(_approvalRequests);
     notifyListeners();
+    _triggerAutoSync();
   }
 
   Future<void> rejectRequest(String requestId, {String? reason}) async {
@@ -949,6 +980,7 @@ class DeliveryProvider extends ChangeNotifier {
     if (hasChanges) {
       await _storage.saveApprovalRequests(_approvalRequests);
       notifyListeners();
+      _triggerAutoSync();
     }
   }
 

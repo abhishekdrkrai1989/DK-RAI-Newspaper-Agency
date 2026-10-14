@@ -36,6 +36,16 @@ void main() {
       expect(res.success, isFalse);
       expect(res.message.contains('Please provide both'), isTrue);
     });
+
+    test('deleteCustomerFromCloud and deletePublicationFromCloud fail gracefully on empty credentials', () async {
+      final service = CloudSyncService();
+      final resCust = await service.deleteCustomerFromCloud(url: '', anonKey: '', customerId: 'cust_1');
+      expect(resCust, isFalse);
+      final resPub = await service.deletePublicationFromCloud(url: '', anonKey: '', publicationId: 'pub_1');
+      expect(resPub, isFalse);
+      final resBoy = await service.deleteDeliveryBoyFromCloud(url: '', anonKey: '', boyId: 'boy_1');
+      expect(resBoy, isFalse);
+    });
   });
 
   group('DeliveryProvider Cloud Sync Integration Tests', () {

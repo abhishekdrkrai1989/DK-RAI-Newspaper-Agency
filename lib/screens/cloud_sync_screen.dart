@@ -254,6 +254,33 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.bolt, size: 16, color: Color(0xFF2563EB)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      s.isHindi
+                          ? 'ऑटो-सिंक सक्रिय: हर बदलाव (डिलीवरी, चालू/बंद, ग्राहक, हॉकर) अपने आप तुरंत बैकएंड (Supabase) में सहेजा जाता है।'
+                          : 'Real-Time Auto-Sync: Every action (deliveries, pauses, customers, hawkers) is automatically saved to Supabase in the background.',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF1E40AF),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),

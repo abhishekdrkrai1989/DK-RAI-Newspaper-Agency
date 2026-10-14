@@ -657,6 +657,43 @@ class CloudSyncService {
     }
   }
 
+  Future<bool> deleteCustomerFromCloud({
+    required String url,
+    required String anonKey,
+    required String customerId,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse('$cleanUrl/rest/v1/customers?id=eq.$customerId');
+      final res = await _client
+          .delete(uri, headers: _headers(anonKey))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deletePublicationFromCloud({
+    required String url,
+    required String anonKey,
+    required String publicationId,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri =
+          Uri.parse('$cleanUrl/rest/v1/publications?id=eq.$publicationId');
+      final res = await _client
+          .delete(uri, headers: _headers(anonKey))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Copyable PostgreSQL SQL script for Supabase SQL Editor
   static String get sqlSetupScript => '''
 -- ==============================================================

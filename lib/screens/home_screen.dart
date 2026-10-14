@@ -891,45 +891,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               );
                             },
                           ),
-                          const SizedBox(width: 8),
-                          ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: p.isCloudConfigured
-                                  ? Colors.blueGrey.shade800
-                                  : Colors.orange.shade900,
-                              foregroundColor: Colors.white,
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 10,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                            icon: Icon(
-                              p.isSyncing
-                                  ? Icons.sync
-                                  : (p.isCloudConfigured
-                                      ? Icons.cloud_done
-                                      : Icons.cloud_queue),
-                              size: 16,
-                            ),
-                            label: Text(
-                              s.cloudSyncTitle,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => CloudSyncScreen(provider: p),
-                                ),
-                              );
-                            },
-                          ),
+
                           if (p.isOwner) ...[
                             const SizedBox(width: 8),
                             ElevatedButton.icon(
