@@ -37,7 +37,11 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   void initState() {
     super.initState();
     final c = widget.existingCustomer;
-    _selectedDeliveryBoyId = c?.deliveryBoyId;
+    if (widget.provider.isDeliveryBoy) {
+      _selectedDeliveryBoyId = widget.provider.currentUser?.id;
+    } else {
+      _selectedDeliveryBoyId = c?.deliveryBoyId;
+    }
     final nextSeq = widget.provider.allCustomers.isEmpty
         ? 1
         : (widget.provider.allCustomers
@@ -47,9 +51,13 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
     _nameCtrl = TextEditingController(text: c?.name ?? '');
     _houseCtrl = TextEditingController(text: c?.houseNumber ?? '');
-    _blockCtrl = TextEditingController(
-      text: c?.block ?? (widget.provider.selectedBlock ?? ''),
-    );
+
+    String initialBlock = c?.block ?? (widget.provider.selectedBlock ?? '');
+    if (initialBlock.isEmpty && widget.provider.isDeliveryBoy) {
+      initialBlock =
+          widget.provider.currentUser?.assignedBlocks.firstOrNull ?? '';
+    }
+    _blockCtrl = TextEditingController(text: initialBlock);
     _areaCtrl = TextEditingController(
       text: c?.area ?? (widget.provider.selectedArea ?? ''),
     );
@@ -187,6 +195,28 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         ? blockText
         : Customer.inferBlockFromHouseNumber(houseNo);
 
+    if (widget.provider.isDeliveryBoy &&
+        !widget.provider.canCurrentUserAccessBlock(resolvedBlock)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.cannotModifyOtherBlock),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return;
+    }
+    if (existing != null &&
+        widget.provider.isDeliveryBoy &&
+        !widget.provider.canCurrentUserAccessBlock(existing.block)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(s.cannotModifyOtherBlock),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return;
+    }
+
     String? assignedName;
     if (_selectedDeliveryBoyId != null && _selectedDeliveryBoyId!.isNotEmpty) {
       final boy = widget.provider.allUsers.firstWhere(
@@ -224,7 +254,18 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       notes: _notesCtrl.text.trim(),
     );
 
-    await widget.provider.saveCustomer(customer);
+    final ok = await widget.provider.saveCustomer(customer);
+    if (!ok) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(s.cannotModifyOtherBlock),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+      return;
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -232,9 +273,15 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   Widget build(BuildContext context) {
     final s = widget.provider.strings;
     final isEditing = widget.existingCustomer != null;
+    final canEditCurrent = !isEditing ||
+        !widget.provider.isDeliveryBoy ||
+        widget.provider
+            .canCurrentUserAccessBlock(widget.existingCustomer!.block);
     final publications = widget.provider.publications;
     final existingSocieties = widget.provider.availableAreas;
-    final existingBlocks = widget.provider.allUniqueBlocks;
+    final existingBlocks = widget.provider.isDeliveryBoy
+        ? (widget.provider.currentUser?.assignedBlocks ?? const <String>[])
+        : widget.provider.allManagedBlocks;
 
     return Scaffold(
       appBar: AppBar(
@@ -247,6 +294,31 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (!canEditCurrent)
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  border: Border.all(color: Colors.red.shade300),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock, color: Colors.red.shade700),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        s.cannotModifyOtherBlock,
+                        style: TextStyle(
+                          color: Colors.red.shade900,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Route Sequence & House Number Row
             Row(
               children: [
@@ -338,13 +410,34 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
             // Block / Wing / Tower Field + Quick Chips
             TextFormField(
               controller: _blockCtrl,
+              readOnly: !canEditCurrent ||
+                  (widget.provider.isDeliveryBoy &&
+                      (widget.provider.currentUser?.assignedBlocks.length ??
+                              0) <=
+                          1),
               decoration: InputDecoration(
                 labelText: s.blockTower,
                 prefixIcon: const Icon(Icons.domain_outlined),
+                helperText: widget.provider.isDeliveryBoy
+                    ? '${s.assignedBlocksLabel}: ${(widget.provider.currentUser?.assignedBlocks ?? []).join(", ")}'
+                    : null,
                 border: const OutlineInputBorder(),
               ),
+              validator: (v) {
+                final text = (v ?? '').trim();
+                final resolved = text.isNotEmpty
+                    ? text
+                    : Customer.inferBlockFromHouseNumber(
+                        _houseCtrl.text.trim(),
+                      );
+                if (widget.provider.isDeliveryBoy &&
+                    !widget.provider.canCurrentUserAccessBlock(resolved)) {
+                  return s.cannotModifyOtherBlock;
+                }
+                return null;
+              },
             ),
-            if (existingBlocks.isNotEmpty) ...[
+            if (existingBlocks.isNotEmpty && canEditCurrent) ...[
               const SizedBox(height: 6),
               Wrap(
                 spacing: 6,
@@ -376,40 +469,43 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
             ),
             const SizedBox(height: 14),
 
-            // Delivery Boy / Hawker Assignment
-            DropdownButtonFormField<String?>(
-              value: _selectedDeliveryBoyId,
-              decoration: InputDecoration(
-                labelText: s.tr(
-                  'Assigned Hawker / Delivery Boy',
-                  'सौंपा गया हॉकर / डिलीवरी बॉय',
+            // Delivery Boy / Hawker Assignment (Admin / Owner only)
+            if (widget.provider.isOwner) ...[
+              DropdownButtonFormField<String?>(
+                value: _selectedDeliveryBoyId,
+                decoration: InputDecoration(
+                  labelText: s.tr(
+                    'Assigned Hawker / Delivery Boy',
+                    'सौंपा गया हॉकर / डिलीवरी बॉय',
+                  ),
+                  prefixIcon: const Icon(Icons.two_wheeler_outlined),
+                  border: const OutlineInputBorder(),
                 ),
-                prefixIcon: const Icon(Icons.two_wheeler_outlined),
-                border: const OutlineInputBorder(),
+                items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child:
+                        Text(s.tr('Auto / Unassigned', 'स्वचालित / कोई नहीं')),
+                  ),
+                  ...widget.provider.allUsers
+                      .where((u) => u.isDeliveryBoy)
+                      .map((boy) {
+                    return DropdownMenuItem<String?>(
+                      value: boy.id,
+                      child: Text(
+                        '${boy.name} (${boy.assignedArea.isNotEmpty ? boy.assignedArea : boy.phone})',
+                      ),
+                    );
+                  }),
+                ],
+                onChanged: (val) {
+                  setState(() {
+                    _selectedDeliveryBoyId = val;
+                  });
+                },
               ),
-              items: [
-                DropdownMenuItem<String?>(
-                  value: null,
-                  child: Text(s.tr('Auto / Unassigned', 'स्वचालित / कोई नहीं')),
-                ),
-                ...widget.provider.allUsers
-                    .where((u) => u.isDeliveryBoy)
-                    .map((boy) {
-                  return DropdownMenuItem<String?>(
-                    value: boy.id,
-                    child: Text(
-                      '${boy.name} (${boy.assignedArea.isNotEmpty ? boy.assignedArea : boy.phone})',
-                    ),
-                  );
-                }),
-              ],
-              onChanged: (val) {
-                setState(() {
-                  _selectedDeliveryBoyId = val;
-                });
-              },
-            ),
-            const SizedBox(height: 14),
+              const SizedBox(height: 14),
+            ],
 
             TextFormField(
               controller: _notesCtrl,
@@ -680,7 +776,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                onPressed: _save,
+                onPressed: canEditCurrent ? _save : null,
               ),
             ),
             const SizedBox(height: 24),

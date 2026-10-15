@@ -8,6 +8,15 @@ Future<void> showPausePaperDialog({
   required Customer customer,
 }) async {
   final s = provider.strings;
+  if (!provider.canCurrentUserAccessBlock(customer.block)) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(s.cannotModifyOtherBlock),
+        backgroundColor: Colors.red.shade700,
+      ),
+    );
+    return;
+  }
   bool useDateRange = false;
   DateTime startDate = provider.selectedDate;
   DateTime endDate = provider.selectedDate.add(const Duration(days: 3));

@@ -12,6 +12,7 @@ import 'customer_detail_screen.dart';
 import 'customer_form_screen.dart';
 import 'delivery_boys_screen.dart';
 import 'login_screen.dart';
+import 'manage_blocks_screen.dart';
 import 'monthly_billing_report_screen.dart';
 import 'morning_delivery_list_screen.dart';
 import 'newspaper_report_screen.dart';
@@ -164,6 +165,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               if (p.isOwner) ...[
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.all(6),
+                  tooltip: s.manageBlocksTitle,
+                  icon: const Icon(Icons.domain_add, color: Colors.amberAccent),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ManageBlocksScreen(provider: p),
+                      ),
+                    );
+                  },
+                ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.all(6),
@@ -350,16 +364,57 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     children: [
-                      const Icon(Icons.delivery_dining, color: Colors.white, size: 20),
+                      const Icon(Icons.two_wheeler, color: Colors.white, size: 22),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          s.deliveryBoyBanner,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 2,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  p.currentUser?.name ?? 'Delivery Boy',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amberAccent,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    p.currentUser?.assignedBlocks.isNotEmpty == true
+                                        ? '${s.assignedBlocksLabel}: ${p.currentUser!.assignedBlocks.join(", ")}'
+                                        : s.noAssignedBlocksWarning,
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              s.deliveryBoyBanner,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       TextButton(
@@ -841,6 +896,37 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               );
                             }),
+                            if (p.isOwner)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: ActionChip(
+                                  avatar: const Icon(
+                                    Icons.tune,
+                                    size: 14,
+                                    color: Color(0xFF4338CA),
+                                  ),
+                                  label: Text(
+                                    s.manageBlocksBtn,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF4338CA),
+                                    ),
+                                  ),
+                                  backgroundColor: const Color(0xFFEEF2FF),
+                                  side: const BorderSide(
+                                    color: Color(0xFFC7D2FE),
+                                  ),
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            ManageBlocksScreen(provider: p),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -976,6 +1062,37 @@ class _HomeScreenState extends State<HomeScreen> {
                                   MaterialPageRoute(
                                     builder: (_) =>
                                         DeliveryBoysScreen(provider: p),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF4338CA),
+                                foregroundColor: Colors.white,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.domain_add, size: 16),
+                              label: Text(
+                                '${s.manageBlocksBtn} (${p.allManagedBlocks.length})',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        ManageBlocksScreen(provider: p),
                                   ),
                                 );
                               },

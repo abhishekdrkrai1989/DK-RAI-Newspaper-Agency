@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../models/app_user.dart';
 import '../providers/delivery_provider.dart';
 import '../widgets/edit_admin_pin_dialog.dart';
+import 'manage_blocks_screen.dart';
 
 class DeliveryBoysScreen extends StatefulWidget {
   final DeliveryProvider provider;
@@ -105,6 +106,7 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
           return b.name.toLowerCase().contains(q) ||
               b.phone.toLowerCase().contains(q) ||
               b.assignedArea.toLowerCase().contains(q) ||
+              b.assignedBlocks.any((blk) => blk.toLowerCase().contains(q)) ||
               b.vehicleNumber.toLowerCase().contains(q);
         }).toList();
 
@@ -122,6 +124,17 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
               ),
             ),
             actions: [
+              IconButton(
+                tooltip: s.manageBlocksTitle,
+                icon: const Icon(Icons.domain_add),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ManageBlocksScreen(provider: p),
+                    ),
+                  );
+                },
+              ),
               IconButton(
                 tooltip: s.addDeliveryBoy,
                 icon: const Icon(Icons.person_add_alt_1),
@@ -296,6 +309,71 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
                         ),
                       ),
                     ],
+                  ),
+                ),
+              ),
+
+              // Manage Blocks Quick Button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ManageBlocksScreen(provider: p),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A8A).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF1E3A8A).withOpacity(0.2),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.domain_add,
+                          color: Color(0xFF1E3A8A),
+                          size: 22,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                s.manageBlocksTitle,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Color(0xFF1E3A8A),
+                                ),
+                              ),
+                              Text(
+                                s.manageBlocksSubtitle,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(
+                          Icons.arrow_forward_ios,
+                          size: 13,
+                          color: Color(0xFF1E3A8A),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -680,6 +758,81 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
                                           ),
                                         ),
 
+                                      // Assigned Blocks Badges
+                                      if (boy.assignedBlocks.isNotEmpty)
+                                        ...boy.assignedBlocks.map(
+                                          (blk) => Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEFF6FF),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: const Color(0xFFBFDBFE),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.domain,
+                                                  size: 13,
+                                                  color: Color(0xFF1D4ED8),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  blk,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF1E40AF),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        )
+                                      else
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFFFBEB),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: const Color(0xFFFDE68A),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.warning_amber_rounded,
+                                                size: 13,
+                                                color: Color(0xFFD97706),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                s.tr(
+                                                  'No Block Assigned',
+                                                  'कोई ब्लॉक आवंटित नहीं',
+                                                ),
+                                                style: const TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Color(0xFFB45309),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
                                       // Vehicle Number
                                       if (boy.vehicleNumber.isNotEmpty)
                                         Container(
@@ -897,6 +1050,7 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
   late final TextEditingController _vehicleCtrl;
   late final TextEditingController _notesCtrl;
   late bool _isActive;
+  late Set<String> _selectedBlocks;
   bool _obscurePin = false;
 
   @override
@@ -912,6 +1066,7 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
     _vehicleCtrl = TextEditingController(text: boy?.vehicleNumber ?? '');
     _notesCtrl = TextEditingController(text: boy?.notes ?? '');
     _isActive = boy?.isActive ?? true;
+    _selectedBlocks = Set<String>.from(boy?.assignedBlocks ?? []);
   }
 
   @override
@@ -931,6 +1086,57 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
     return code.toString();
   }
 
+  void _promptNewBlockForBoy() {
+    final s = widget.provider.strings;
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.domain_add, color: Color(0xFF1E3A8A)),
+            const SizedBox(width: 8),
+            Text(s.addNewBlockBtn),
+          ],
+        ),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: InputDecoration(
+            hintText: s.blockNameHint,
+            labelText: s.blockNameLabel,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(s.tr('Cancel', 'रद्द करें')),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E3A8A),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              final val = ctrl.text.trim();
+              if (val.isNotEmpty) {
+                widget.provider.addCustomBlock(val);
+                setState(() {
+                  _selectedBlocks.add(val);
+                });
+              }
+              Navigator.pop(ctx);
+            },
+            child: Text(s.tr('Add Block', 'ब्लॉक जोड़ें')),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handleSave() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -946,6 +1152,7 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
       pin: _pinCtrl.text.trim(),
       phone: _phoneCtrl.text.trim(),
       assignedArea: _areaCtrl.text.trim(),
+      assignedBlocks: _selectedBlocks.toList()..sort(),
       isActive: _isActive,
       vehicleNumber: _vehicleCtrl.text.trim(),
       notes: _notesCtrl.text.trim(),
@@ -1213,6 +1420,89 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                   ),
                 ),
               ],
+              const SizedBox(height: 12),
+
+              // Assigned Blocks Section (Multi-select)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.domain, size: 16, color: Color(0xFF1E3A8A)),
+                      const SizedBox(width: 6),
+                      Text(
+                        s.assignedBlocksLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    icon: const Icon(Icons.add, size: 14),
+                    label: Text(
+                      s.tr('Add Block', 'नया ब्लॉक'),
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    onPressed: _promptNewBlockForBoy,
+                  ),
+                ],
+              ),
+              if (widget.provider.allManagedBlocks.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    s.tr(
+                      'No blocks created yet. Tap + Add Block.',
+                      'कोई ब्लॉक नहीं है। + नया ब्लॉक दबाएं।',
+                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                  ),
+                )
+              else
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: widget.provider.allManagedBlocks.map((blk) {
+                    final isSel = _selectedBlocks.any(
+                      (b) => b.trim().toLowerCase() == blk.trim().toLowerCase(),
+                    );
+                    return FilterChip(
+                      avatar: Icon(
+                        isSel ? Icons.check_circle : Icons.domain,
+                        size: 14,
+                        color: isSel ? Colors.white : const Color(0xFF1E3A8A),
+                      ),
+                      label: Text(blk),
+                      selected: isSel,
+                      selectedColor: const Color(0xFF1E3A8A),
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSel ? Colors.white : Colors.indigo.shade900,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                        fontSize: 12,
+                      ),
+                      onSelected: (val) {
+                        setState(() {
+                          if (val) {
+                            _selectedBlocks.add(blk);
+                          } else {
+                            _selectedBlocks.removeWhere(
+                              (b) =>
+                                  b.trim().toLowerCase() ==
+                                  blk.trim().toLowerCase(),
+                            );
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
               const SizedBox(height: 12),
 
               // Vehicle Details (Optional)

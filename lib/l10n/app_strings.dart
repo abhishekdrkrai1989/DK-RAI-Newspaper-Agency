@@ -424,4 +424,48 @@ class AppStrings {
       tr('Admin profile and PIN updated successfully!', 'एडमिन प्रोफ़ाइल और लॉगिन पिन सफलतापूर्वक बदल दिया गया!');
   String get ownerCardTitle =>
       tr('Agency Owner / Admin (You)', 'एजेंसी मालिक (एडमिन)');
+
+  // Block Management & Assignment
+  String get manageBlocksTitle =>
+      tr('Manage Blocks & Hawkers', 'ब्लॉक एवं हॉकर प्रबंधन');
+  String get manageBlocksBtn =>
+      tr('Manage Blocks', 'ब्लॉक प्रबंधन');
+  String get manageBlocksSubtitle => tr(
+        'Assign fixed blocks to delivery boys & add new blocks',
+        'हॉकरों को निर्धारित ब्लॉक आवंटित करें और नए ब्लॉक जोड़ें',
+      );
+  String get assignedBlocksLabel =>
+      tr('Assigned Blocks', 'आवंटित ब्लॉक');
+  String get totalBlocksCount =>
+      tr('Total Blocks', 'कुल ब्लॉक');
+  String get assignedBlocksCount =>
+      tr('Assigned Blocks', 'आवंटित ब्लॉक');
+  String get unassignedBlocksCount =>
+      tr('Unassigned Blocks', 'अनावंटित ब्लॉक');
+  String get addNewBlockBtn =>
+      tr('Add New Block', 'नया ब्लॉक जोड़ें');
+  String get blockNameLabel =>
+      tr('Block / Tower Name', 'ब्लॉक / टॉवर का नाम');
+  String get blockNameHint =>
+      tr('e.g., Block C, Tower 2, Wing B', 'उदा. ब्लॉक C, टॉवर 2, विंग B');
+  String get assignDeliveryBoyLabel =>
+      tr('Assign Delivery Boy (Hawker)', 'हॉकर (डिलीवरी बॉय) चुनें');
+  String get unassignedOption =>
+      tr('Unassigned (No Hawker)', 'कोई हॉकर नहीं (अनावंटित)');
+  String get blockSavedSuccess =>
+      tr('Block saved and assigned successfully!', 'ब्लॉक सफलतापूर्वक सहेजा व आवंटित किया गया!');
+  String get blockAssignmentUpdated =>
+      tr('Hawker assignment updated!', 'हॉकर आवंटन सफलतापूर्वक बदल दिया गया!');
+  String get blockAccessDenied => tr(
+        'Access Restricted: You can only view and manage your assigned block(s).',
+        'प्रतिबंधित: आप केवल अपने आवंटित ब्लॉक को ही देख और प्रबंधित कर सकते हैं।',
+      );
+  String get cannotModifyOtherBlock => tr(
+        'You cannot add, edit, delete, start, or stop paper for other blocks.',
+        'आप अन्य ब्लॉक के ग्राहकों या पेपर को जोड़, बदल, हटा, चालू या बंद नहीं कर सकते।',
+      );
+  String get noAssignedBlocksWarning => tr(
+        'No blocks have been assigned to you. Contact Admin.',
+        'आपको कोई ब्लॉक आवंटित नहीं किया गया है। कृपया एडमिन से संपर्क करें।',
+      );
 }

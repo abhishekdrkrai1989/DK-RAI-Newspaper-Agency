@@ -20,6 +20,7 @@ class LocalStorageService {
   static const String _keyCurrentUser = 'newspaper_app_current_user_v1';
   static const String _keyApprovalRequests = 'newspaper_app_approval_requests_v1';
   static const String _keyNewspaperEvents = 'newspaper_app_events_v1';
+  static const String _keyCustomBlocks = 'newspaper_app_custom_blocks_v1';
 
   final StorageBackend _prefs;
 
@@ -165,6 +166,26 @@ class LocalStorageService {
   Future<void> saveNewspaperEvents(List<NewspaperEvent> events) async {
     final encoded = jsonEncode(events.map((e) => e.toJson()).toList());
     await _prefs.setString(_keyNewspaperEvents, encoded);
+  }
+
+  List<String> loadCustomBlocks() {
+    final raw = _prefs.getString(_keyCustomBlocks);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveCustomBlocks(List<String> blocks) async {
+    final clean = blocks.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
+    final encoded = jsonEncode(clean);
+    await _prefs.setString(_keyCustomBlocks, encoded);
   }
 
   List<Publication> loadPublications() {

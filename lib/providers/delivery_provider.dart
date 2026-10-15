@@ -24,6 +24,7 @@ class DeliveryProvider extends ChangeNotifier {
   late List<Publication> _publications;
   late List<Customer> _customers;
   late List<NewspaperEvent> _newspaperEvents;
+  late List<String> _customBlocks;
 
   late List<AppUser> _users;
   AppUser? _currentUser;
@@ -50,6 +51,7 @@ class DeliveryProvider extends ChangeNotifier {
     _publications = _storage.loadPublications();
     _customers = _storage.loadCustomers();
     _newspaperEvents = _storage.loadNewspaperEvents();
+    _customBlocks = _storage.loadCustomBlocks();
     _supabaseUrl = _storage.loadSupabaseUrl();
     if (_supabaseUrl.isEmpty) {
       _supabaseUrl = LocalStorageService.defaultSupabaseUrl;
@@ -62,6 +64,9 @@ class DeliveryProvider extends ChangeNotifier {
     _lastSyncTime = _storage.loadLastSyncTime();
     _users = List<AppUser>.from(_storage.loadUsers());
     _currentUser = _storage.loadCurrentUser();
+    if (_currentUser != null) {
+      _adjustLocationFiltersForUser(_currentUser!);
+    }
     _approvalRequests = _storage.loadApprovalRequests();
 
     // Automatically connect and sync with Supabase cloud DB on launch
@@ -81,7 +86,21 @@ class DeliveryProvider extends ChangeNotifier {
   AppLanguage get language => _language;
   AppStrings get strings => AppStrings(_language);
   List<Publication> get publications => List.unmodifiable(_publications);
-  List<Customer> get allCustomers => List.unmodifiable(_customers);
+
+  /// For Delivery Boy: Returns ONLY customers in their assigned block(s).
+  /// For Admin / Owner: Returns all customers.
+  List<Customer> get allCustomers {
+    if (isDeliveryBoy) {
+      return List.unmodifiable(
+        _customers.where((c) => canCurrentUserAccessCustomer(c)).toList(),
+      );
+    }
+    return List.unmodifiable(_customers);
+  }
+
+  /// Unrestricted customers list for admin and internal syncing
+  List<Customer> get adminAllCustomers => List.unmodifiable(_customers);
+
   List<NewspaperEvent> get newspaperEvents =>
       List.unmodifiable(_newspaperEvents);
   DistributionFilter get filter => _filter;
@@ -96,6 +115,22 @@ class DeliveryProvider extends ChangeNotifier {
   bool get isOwner => _currentUser?.isOwner ?? false;
   bool get isDeliveryBoy => _currentUser?.isDeliveryBoy ?? false;
   List<AppUser> get allUsers => List.unmodifiable(_users);
+
+  /// Whether current user has access to view/modify the specified customer.
+  /// Admin has full access. Delivery boy can only access customers in assigned blocks.
+  bool canCurrentUserAccessCustomer(Customer customer) {
+    if (_currentUser == null || _currentUser!.isOwner) return true;
+    final block = customer.block.trim().isNotEmpty
+        ? customer.block.trim()
+        : Customer.inferBlockFromHouseNumber(customer.houseNumber);
+    return _currentUser!.canAccessBlock(block);
+  }
+
+  /// Whether current user has access to view/modify the specified block.
+  bool canCurrentUserAccessBlock(String block) {
+    if (_currentUser == null || _currentUser!.isOwner) return true;
+    return _currentUser!.canAccessBlock(block);
+  }
 
   // Approval Request Getters
   List<ApprovalRequest> get approvalRequests =>
@@ -125,10 +160,13 @@ class DeliveryProvider extends ChangeNotifier {
     return null;
   }
 
-  /// All unique Societies / Colonies
+  /// All unique Societies / Colonies (scoped to assigned blocks for delivery boy)
   List<String> get availableAreas {
     final set = <String>{};
     for (final c in _customers) {
+      if (isDeliveryBoy && !canCurrentUserAccessCustomer(c)) {
+        continue;
+      }
       if (c.area.trim().isNotEmpty) {
         set.add(c.area.trim());
       }
@@ -137,20 +175,52 @@ class DeliveryProvider extends ChangeNotifier {
     return list;
   }
 
-  /// All unique Blocks across the entire customer list (used for form suggestions)
+  /// All unique Blocks across customers and custom blocks (scoped for delivery boy)
   List<String> get allUniqueBlocks {
+    if (isDeliveryBoy) {
+      return List.unmodifiable(_currentUser?.assignedBlocks ?? []);
+    }
     final set = <String>{};
     for (final c in _customers) {
       if (c.block.trim().isNotEmpty) {
         set.add(c.block.trim());
       }
     }
+    for (final b in _customBlocks) {
+      if (b.trim().isNotEmpty) {
+        set.add(b.trim());
+      }
+    }
+    for (final u in _users) {
+      for (final b in u.assignedBlocks) {
+        if (b.trim().isNotEmpty) {
+          set.add(b.trim());
+        }
+      }
+    }
     final list = set.toList()..sort();
     return list;
   }
 
-  /// Blocks available for the currently selected Society (or all blocks if no Society is selected)
+  /// Blocks available for the currently selected Society (strictly scoped for delivery boy)
   List<String> get availableBlocks {
+    if (isDeliveryBoy) {
+      final assigned = _currentUser?.assignedBlocks ?? [];
+      if (_selectedArea != null && _selectedArea!.isNotEmpty) {
+        final set = <String>{};
+        for (final c in _customers) {
+          if (c.area.trim().toLowerCase() == _selectedArea!.toLowerCase() &&
+              canCurrentUserAccessBlock(c.block) &&
+              c.block.trim().isNotEmpty) {
+            set.add(c.block.trim());
+          }
+        }
+        final list = set.toList()..sort();
+        return list;
+      }
+      return List.unmodifiable(assigned);
+    }
+
     final set = <String>{};
     for (final c in _customers) {
       if (_selectedArea != null &&
@@ -162,18 +232,26 @@ class DeliveryProvider extends ChangeNotifier {
         set.add(c.block.trim());
       }
     }
+    if (_selectedArea == null || _selectedArea!.isEmpty) {
+      for (final b in _customBlocks) {
+        if (b.trim().isNotEmpty) set.add(b.trim());
+      }
+    }
     final list = set.toList()..sort();
     return list;
   }
 
   int countForSociety(String society) {
-    return _customers
-        .where((c) => c.area.trim().toLowerCase() == society.toLowerCase())
-        .length;
+    return _customers.where((c) {
+      if (isDeliveryBoy && !canCurrentUserAccessCustomer(c)) return false;
+      return c.area.trim().toLowerCase() == society.toLowerCase();
+    }).length;
   }
 
   int countForBlock(String block) {
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(block)) return 0;
     return _customers.where((c) {
+      if (isDeliveryBoy && !canCurrentUserAccessCustomer(c)) return false;
       if (_selectedArea != null &&
           _selectedArea!.isNotEmpty &&
           c.area.trim().toLowerCase() != _selectedArea!.toLowerCase()) {
@@ -183,9 +261,12 @@ class DeliveryProvider extends ChangeNotifier {
     }).length;
   }
 
-  /// Customers matching the active Society and Block filters
+  /// Customers matching the active Society and Block filters (restricted to delivery boy's block)
   List<Customer> get _locationFilteredCustomers {
     return _customers.where((c) {
+      if (isDeliveryBoy && !canCurrentUserAccessCustomer(c)) {
+        return false;
+      }
       if (_selectedArea != null && _selectedArea!.isNotEmpty) {
         if (c.area.trim().toLowerCase() != _selectedArea!.toLowerCase()) {
           return false;
@@ -343,6 +424,11 @@ class DeliveryProvider extends ChangeNotifier {
     if (index == -1) return;
 
     final current = _customers[index];
+    // Delivery Boy cannot start paper for other blocks
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(current.block)) {
+      return;
+    }
+
     final log = StatusLog(
       status: DeliveryStatus.started,
       timestamp: DateTime.now(),
@@ -401,6 +487,11 @@ class DeliveryProvider extends ChangeNotifier {
     if (index == -1) return;
 
     final current = _customers[index];
+    // Delivery Boy cannot pause paper for other blocks
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(current.block)) {
+      return;
+    }
+
     final log = StatusLog(
       status: DeliveryStatus.paused,
       timestamp: DateTime.now(),
@@ -464,6 +555,11 @@ class DeliveryProvider extends ChangeNotifier {
     if (index == -1) return;
 
     final current = _customers[index];
+    // Delivery Boy cannot toggle item pause for other blocks
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(current.block)) {
+      return;
+    }
+
     final pub = getPublicationById(publicationId);
     final pubName = pub?.nameEn ?? publicationId;
     bool? newPausedState;
@@ -533,6 +629,10 @@ class DeliveryProvider extends ChangeNotifier {
     if (index == -1) return;
 
     final current = _customers[index];
+    // Delivery Boy cannot deliver for other blocks
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(current.block)) {
+      return;
+    }
     final key = Customer.dateKey(_selectedDate);
     final updatedDates = [...current.deliveredDates];
     if (updatedDates.contains(key)) {
@@ -547,8 +647,19 @@ class DeliveryProvider extends ChangeNotifier {
     _triggerAutoSync();
   }
 
-  Future<void> saveCustomer(Customer customer) async {
+  Future<bool> saveCustomer(Customer customer) async {
+    // Delivery Boy cannot add or edit customer in an unauthorized block
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(customer.block)) {
+      return false;
+    }
+
     final index = _customers.indexWhere((c) => c.id == customer.id);
+    if (index >= 0 &&
+        isDeliveryBoy &&
+        !canCurrentUserAccessBlock(_customers[index].block)) {
+      return false;
+    }
+
     final isNew = index < 0;
     if (index >= 0) {
       _customers[index] = customer;
@@ -595,40 +706,42 @@ class DeliveryProvider extends ChangeNotifier {
       targetId: customer.id,
       payload: customer.toJson(),
     );
+    return true;
   }
 
-  Future<void> deleteCustomer(String customerId) async {
+  Future<bool> deleteCustomer(String customerId) async {
     final index = _customers.indexWhere((c) => c.id == customerId);
-    Customer? deletedCust;
-    String custName = 'Customer';
-    if (index >= 0) {
-      deletedCust = _customers[index];
-      custName = '${deletedCust.name} (${deletedCust.houseNumber})';
+    if (index < 0) return false;
+
+    // Delivery Boy cannot delete customer outside their assigned block
+    if (isDeliveryBoy && !canCurrentUserAccessBlock(_customers[index].block)) {
+      return false;
     }
+
+    final deletedCust = _customers[index];
+    final custName = '${deletedCust.name} (${deletedCust.houseNumber})';
     _customers.removeWhere((c) => c.id == customerId);
     await _storage.saveCustomers(_customers);
 
-    if (deletedCust != null) {
-      for (final sub in deletedCust.subscriptions) {
-        final pub = getPublicationById(sub.publicationId);
-        final pubName = pub?.nameEn ?? sub.publicationId;
-        await recordNewspaperEvent(
-          eventType: NewspaperEventType.deleted,
-          customerId: deletedCust.id,
-          customerName: deletedCust.name,
-          houseNumber: deletedCust.houseNumber,
-          block: deletedCust.block,
-          area: deletedCust.area,
-          deliveryBoyId: deletedCust.deliveryBoyId,
-          deliveryBoyName: deletedCust.deliveryBoyName ??
-              getAssignedDeliveryBoyNameForCustomer(deletedCust),
-          newspaperName: pubName,
-          publicationId: sub.publicationId,
-          quantity: sub.quantity,
-          note: 'Customer Removed',
-          skipSync: true,
-        );
-      }
+    for (final sub in deletedCust.subscriptions) {
+      final pub = getPublicationById(sub.publicationId);
+      final pubName = pub?.nameEn ?? sub.publicationId;
+      await recordNewspaperEvent(
+        eventType: NewspaperEventType.deleted,
+        customerId: deletedCust.id,
+        customerName: deletedCust.name,
+        houseNumber: deletedCust.houseNumber,
+        block: deletedCust.block,
+        area: deletedCust.area,
+        deliveryBoyId: deletedCust.deliveryBoyId,
+        deliveryBoyName: deletedCust.deliveryBoyName ??
+            getAssignedDeliveryBoyNameForCustomer(deletedCust),
+        newspaperName: pubName,
+        publicationId: sub.publicationId,
+        quantity: sub.quantity,
+        note: 'Customer Removed',
+        skipSync: true,
+      );
     }
 
     notifyListeners();
@@ -643,8 +756,9 @@ class DeliveryProvider extends ChangeNotifier {
       title: 'Customer Deleted: $custName',
       description: 'Removed customer from delivery route',
       targetId: customerId,
-      payload: deletedCust?.toJson(),
+      payload: deletedCust.toJson(),
     );
+    return true;
   }
 
   Future<void> savePublication(Publication publication) async {
@@ -839,6 +953,21 @@ class DeliveryProvider extends ChangeNotifier {
   List<AppUser> get deliveryBoys =>
       _users.where((u) => u.isDeliveryBoy).toList();
 
+  void _adjustLocationFiltersForUser(AppUser user) {
+    if (user.isDeliveryBoy) {
+      if (user.assignedBlocks.isNotEmpty) {
+        if (_selectedBlock == null || !user.canAccessBlock(_selectedBlock!)) {
+          _selectedBlock = user.assignedBlocks.first;
+        }
+      } else {
+        _selectedBlock = null;
+      }
+      if (_selectedArea != null && !availableAreas.contains(_selectedArea)) {
+        _selectedArea = null;
+      }
+    }
+  }
+
   Future<bool> login(String userId, String pin) async {
     final user = _users.firstWhere(
       (u) => u.id == userId,
@@ -849,6 +978,7 @@ class DeliveryProvider extends ChangeNotifier {
         return false;
       }
       _currentUser = user;
+      _adjustLocationFiltersForUser(user);
       await _storage.saveCurrentUser(_currentUser);
       notifyListeners();
       return true;
@@ -893,7 +1023,150 @@ class DeliveryProvider extends ChangeNotifier {
 
   Future<void> switchUser(AppUser user) async {
     _currentUser = user;
+    _adjustLocationFiltersForUser(user);
     await _storage.saveCurrentUser(user);
+    notifyListeners();
+  }
+
+  // ==========================================
+  // Block & Hawker Assignment Management
+  // ==========================================
+
+  List<String> get customBlocks => List.unmodifiable(_customBlocks);
+
+  /// All unique blocks across customers, custom blocks, and delivery boys
+  List<String> get allManagedBlocks {
+    final set = <String>{};
+    for (final c in _customers) {
+      if (c.block.trim().isNotEmpty) set.add(c.block.trim());
+    }
+    for (final b in _customBlocks) {
+      if (b.trim().isNotEmpty) set.add(b.trim());
+    }
+    for (final u in _users) {
+      for (final b in u.assignedBlocks) {
+        if (b.trim().isNotEmpty) set.add(b.trim());
+      }
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  /// Finds the delivery boy assigned to a block
+  AppUser? getDeliveryBoyForBlock(String block) {
+    final target = block.trim().toLowerCase();
+    for (final boy in deliveryBoys) {
+      if (boy.assignedBlocks.any((b) => b.trim().toLowerCase() == target)) {
+        return boy;
+      }
+    }
+    return null;
+  }
+
+  /// Adds a new custom block, optionally assigning it immediately to a delivery boy
+  Future<void> addCustomBlock(String block, {String? assignToBoyId}) async {
+    final trimmed = block.trim();
+    if (trimmed.isEmpty) return;
+
+    if (!_customBlocks.any((b) => b.toLowerCase() == trimmed.toLowerCase())) {
+      _customBlocks.add(trimmed);
+      _customBlocks.sort();
+      await _storage.saveCustomBlocks(_customBlocks);
+    }
+
+    if (assignToBoyId != null && assignToBoyId.isNotEmpty) {
+      await assignBlockToDeliveryBoy(trimmed, assignToBoyId);
+    } else {
+      notifyListeners();
+      _triggerAutoSync();
+    }
+  }
+
+  /// Assigns a block to a specific delivery boy (or unassigns if boyId is null/empty)
+  Future<void> assignBlockToDeliveryBoy(String block, String? boyId) async {
+    final targetBlock = block.trim();
+    if (targetBlock.isEmpty) return;
+    final lower = targetBlock.toLowerCase();
+
+    bool usersModified = false;
+
+    for (int i = 0; i < _users.length; i++) {
+      final user = _users[i];
+      if (!user.isDeliveryBoy) continue;
+
+      if (boyId != null && boyId.isNotEmpty && user.id == boyId) {
+        // Add to this delivery boy if not already present
+        if (!user.assignedBlocks.any((b) => b.trim().toLowerCase() == lower)) {
+          final updatedBlocks = [...user.assignedBlocks, targetBlock]..sort();
+          _users[i] = user.copyWith(assignedBlocks: updatedBlocks);
+          usersModified = true;
+        }
+      } else {
+        // Remove from other delivery boys
+        if (user.assignedBlocks.any((b) => b.trim().toLowerCase() == lower)) {
+          final updatedBlocks = user.assignedBlocks
+              .where((b) => b.trim().toLowerCase() != lower)
+              .toList();
+          _users[i] = user.copyWith(assignedBlocks: updatedBlocks);
+          usersModified = true;
+        }
+      }
+    }
+
+    if (usersModified) {
+      if (_currentUser != null) {
+        final currentIdx = _users.indexWhere((u) => u.id == _currentUser!.id);
+        if (currentIdx != -1) {
+          _currentUser = _users[currentIdx];
+          await _storage.saveCurrentUser(_currentUser);
+        }
+      }
+      await _storage.saveUsers(_users);
+    }
+
+    // Also update deliveryBoyId and deliveryBoyName for all customers in this block
+    final assignedBoy = (boyId != null && boyId.isNotEmpty)
+        ? _users.firstWhere(
+            (u) => u.id == boyId,
+            orElse: () => const AppUser(
+              id: '',
+              name: '',
+              role: UserRole.deliveryBoy,
+              pin: '',
+            ),
+          )
+        : null;
+
+    bool custsModified = false;
+    for (int i = 0; i < _customers.length; i++) {
+      if (_customers[i].block.trim().toLowerCase() == lower) {
+        _customers[i] = _customers[i].copyWith(
+          deliveryBoyId: assignedBoy?.id ?? '',
+          deliveryBoyName: assignedBoy?.name ?? '',
+        );
+        custsModified = true;
+      }
+    }
+
+    if (custsModified) {
+      await _storage.saveCustomers(_customers);
+    }
+
+    notifyListeners();
+    _triggerAutoSync();
+  }
+
+  /// Unassigns a block from all delivery boys
+  Future<void> unassignBlock(String block) async {
+    await assignBlockToDeliveryBoy(block, null);
+  }
+
+  /// Removes a custom block
+  Future<void> removeCustomBlock(String block) async {
+    final lower = block.trim().toLowerCase();
+    _customBlocks.removeWhere((b) => b.trim().toLowerCase() == lower);
+    await _storage.saveCustomBlocks(_customBlocks);
+    await unassignBlock(block);
     notifyListeners();
   }
 
@@ -908,6 +1181,24 @@ class DeliveryProvider extends ChangeNotifier {
     } else {
       _users.add(boy);
     }
+
+    // Ensure customers in boy's assigned blocks reflect this delivery boy
+    bool custModified = false;
+    for (int i = 0; i < _customers.length; i++) {
+      if (boy.canAccessBlock(_customers[i].block)) {
+        if (_customers[i].deliveryBoyId.isEmpty || _customers[i].deliveryBoyId == boy.id) {
+          _customers[i] = _customers[i].copyWith(
+            deliveryBoyId: boy.id,
+            deliveryBoyName: boy.name,
+          );
+          custModified = true;
+        }
+      }
+    }
+    if (custModified) {
+      await _storage.saveCustomers(_customers);
+    }
+
     await _storage.saveUsers(_users);
     notifyListeners();
     _triggerAutoSync();
@@ -1201,6 +1492,18 @@ class DeliveryProvider extends ChangeNotifier {
       );
       if (boy.name.isNotEmpty) return boy.name;
     }
+    // Match by block assignment
+    final blockMatch = _users.firstWhere(
+      (u) => u.isDeliveryBoy && u.canAccessBlock(customer.block),
+      orElse: () => const AppUser(
+        id: '',
+        name: '',
+        role: UserRole.deliveryBoy,
+        pin: '',
+      ),
+    );
+    if (blockMatch.name.isNotEmpty) return blockMatch.name;
+
     // Match by area
     final match = _users.firstWhere(
       (u) =>
@@ -1218,7 +1521,7 @@ class DeliveryProvider extends ChangeNotifier {
     return 'Not Assigned';
   }
 
-  /// Returns customers belonging to a delivery boy (by ID or assigned area)
+  /// Returns customers belonging to a delivery boy (by ID, assigned block, or area)
   List<Customer> getCustomersForDeliveryBoy(String boyId) {
     final boy = _users.firstWhere(
       (u) => u.id == boyId,
@@ -1232,6 +1535,9 @@ class DeliveryProvider extends ChangeNotifier {
     return _customers.where((c) {
       if (c.deliveryBoyId != null && c.deliveryBoyId!.isNotEmpty) {
         return c.deliveryBoyId == boyId;
+      }
+      if (boy.canAccessBlock(c.block)) {
+        return true;
       }
       if (boy.assignedArea.isNotEmpty) {
         return c.area.toLowerCase() == boy.assignedArea.toLowerCase();

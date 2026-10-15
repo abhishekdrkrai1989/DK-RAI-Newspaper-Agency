@@ -215,13 +215,32 @@ class CloudSyncService {
       if (users.isNotEmpty) {
         final boysUri = Uri.parse('$cleanUrl/rest/v1/delivery_boys');
         final boyRows = users.map((u) => _userToRow(u)).toList();
-        final boyRes = await _client
+        var boyRes = await _client
             .post(
               boysUri,
               headers: _headers(anonKey, upsert: true),
               body: jsonEncode(boyRows),
             )
             .timeout(const Duration(seconds: 20));
+
+        // If remote table lacks newly added columns (assigned_blocks), auto-fallback without it:
+        if (boyRes.statusCode == 400 &&
+            (boyRes.body.contains('assigned_blocks') ||
+                boyRes.body.contains('PGRST204'))) {
+          final fallbackRows = boyRows.map((r) {
+            final copy = Map<String, dynamic>.from(r);
+            copy.remove('assigned_blocks');
+            return copy;
+          }).toList();
+
+          boyRes = await _client
+              .post(
+                boysUri,
+                headers: _headers(anonKey, upsert: true),
+                body: jsonEncode(fallbackRows),
+              )
+              .timeout(const Duration(seconds: 20));
+        }
 
         if (boyRes.statusCode >= 200 && boyRes.statusCode < 300) {
           boysSynced = users.length;
@@ -700,6 +719,7 @@ class CloudSyncService {
       'pin': u.pin,
       'phone': u.phone,
       'assigned_area': u.assignedArea,
+      'assigned_blocks': u.assignedBlocks,
       'is_active': u.isActive,
       'vehicle_number': u.vehicleNumber,
       'notes': u.notes,
@@ -717,6 +737,22 @@ class CloudSyncService {
     final assignedArea = (row['assigned_area'] as String?) ??
         (row['assignedArea'] as String?) ??
         '';
+
+    final rawBlocks = row['assigned_blocks'] ?? row['assignedBlocks'];
+    List<String> assignedBlocks = const [];
+    if (rawBlocks is List) {
+      assignedBlocks = rawBlocks
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    } else if (rawBlocks is String && rawBlocks.trim().isNotEmpty) {
+      assignedBlocks = rawBlocks
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+
     final isActive = (row['is_active'] as bool?) ??
         (row['isActive'] as bool?) ??
         true;
@@ -732,6 +768,7 @@ class CloudSyncService {
       pin: pin,
       phone: phone,
       assignedArea: assignedArea,
+      assignedBlocks: assignedBlocks,
       isActive: isActive,
       vehicleNumber: vehicleNumber,
       notes: notes,
@@ -846,11 +883,15 @@ create table if not exists delivery_boys (
   pin text not null default '0000',
   phone text default '',
   assigned_area text default '',
+  assigned_blocks jsonb default '[]'::jsonb,
   is_active boolean default true,
   vehicle_number text default '',
   notes text default '',
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
+
+-- Migration for existing delivery_boys table:
+alter table delivery_boys add column if not exists assigned_blocks jsonb default '[]'::jsonb;
 
 -- 4. Create Newspaper Events Table (Tracking New Start, Started, Paused, Deleted)
 create table if not exists newspaper_events (
@@ -921,11 +962,13 @@ create table if not exists delivery_boys (
   pin text not null default '0000',
   phone text default '',
   assigned_area text default '',
+  assigned_blocks jsonb default '[]'::jsonb,
   is_active boolean default true,
   vehicle_number text default '',
   notes text default '',
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
+alter table delivery_boys add column if not exists assigned_blocks jsonb default '[]'::jsonb;
 alter table delivery_boys enable row level security;
 drop policy if exists "Allow all on delivery_boys for anon" on delivery_boys;
 create policy "Allow all on delivery_boys for anon" on delivery_boys for all using (true) with check (true);

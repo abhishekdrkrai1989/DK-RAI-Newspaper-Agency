@@ -33,6 +33,7 @@ class CustomerDetailScreen extends StatelessWidget {
         }
 
         final isStarted = customer.isStartedOnDate(provider.selectedDate);
+        final canModify = provider.canCurrentUserAccessBlock(customer.block);
 
         return Scaffold(
           appBar: AppBar(
@@ -40,61 +41,88 @@ class CustomerDetailScreen extends StatelessWidget {
             backgroundColor: const Color(0xFF1E3A8A),
             foregroundColor: Colors.white,
             actions: [
-              IconButton(
-                tooltip: s.editCustomer,
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CustomerFormScreen(
-                        provider: provider,
-                        existingCustomer: customer,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                tooltip: s.deleteCustomer,
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: Text(s.deleteCustomer),
-                      content: Text(
-                        s.tr(
-                          'Remove ${customer.name} (${customer.houseNumber}) from your distribution list?',
-                          'क्या आप ${customer.name} (${customer.houseNumber}) को वितरण सूची से हटाना चाहते हैं?',
+              if (canModify) ...[
+                IconButton(
+                  tooltip: s.editCustomer,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CustomerFormScreen(
+                          provider: provider,
+                          existingCustomer: customer,
                         ),
                       ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(ctx).pop(false),
-                          child: Text(s.cancel),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
+                    );
+                  },
+                ),
+                IconButton(
+                  tooltip: s.deleteCustomer,
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text(s.deleteCustomer),
+                        content: Text(
+                          s.tr(
+                            'Remove ${customer.name} (${customer.houseNumber}) from your distribution list?',
+                            'क्या आप ${customer.name} (${customer.houseNumber}) को वितरण सूची से हटाना चाहते हैं?',
                           ),
-                          onPressed: () => Navigator.of(ctx).pop(true),
-                          child: Text(s.confirm),
                         ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true && context.mounted) {
-                    await provider.deleteCustomer(customer.id);
-                    if (context.mounted) Navigator.of(context).pop();
-                  }
-                },
-              ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(false),
+                            child: Text(s.cancel),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => Navigator.of(ctx).pop(true),
+                            child: Text(s.confirm),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && context.mounted) {
+                      await provider.deleteCustomer(customer.id);
+                      if (context.mounted) Navigator.of(context).pop();
+                    }
+                  },
+                ),
+              ],
             ],
           ),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              if (!canModify)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade300),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock, color: Colors.red.shade700),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          s.cannotModifyOtherBlock,
+                          style: TextStyle(
+                            color: Colors.red.shade900,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Main Status Banner Card
               Card(
                 elevation: 2,
@@ -303,17 +331,19 @@ class CustomerDetailScreen extends StatelessWidget {
                               fontSize: 15,
                             ),
                           ),
-                          onPressed: () {
-                            if (isStarted) {
-                              showPausePaperDialog(
-                                context: context,
-                                provider: provider,
-                                customer: customer,
-                              );
-                            } else {
-                              provider.startCustomerPaper(customer.id);
-                            }
-                          },
+                          onPressed: !canModify
+                              ? null
+                              : () {
+                                  if (isStarted) {
+                                    showPausePaperDialog(
+                                      context: context,
+                                      provider: provider,
+                                      customer: customer,
+                                    );
+                                  } else {
+                                    provider.startCustomerPaper(customer.id);
+                                  }
+                                },
                         ),
                       ),
                     ],
@@ -370,12 +400,14 @@ class CustomerDetailScreen extends StatelessWidget {
                     trailing: Switch(
                       value: !sub.isPaused,
                       activeThumbColor: Colors.green.shade700,
-                      onChanged: (_) {
-                        provider.toggleSubscriptionItemPause(
-                          customer.id,
-                          sub.publicationId,
-                        );
-                      },
+                      onChanged: !canModify
+                          ? null
+                          : (_) {
+                              provider.toggleSubscriptionItemPause(
+                                customer.id,
+                                sub.publicationId,
+                              );
+                            },
                     ),
                   ),
                 );
