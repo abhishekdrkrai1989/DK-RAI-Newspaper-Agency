@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/app_user.dart';
 import '../providers/delivery_provider.dart';
+import 'delivery_boys_screen.dart';
 
 class ManageBlocksScreen extends StatefulWidget {
   final DeliveryProvider provider;
@@ -23,15 +24,85 @@ class _ManageBlocksScreenState extends State<ManageBlocksScreen> {
 
   void _openAddBlockDialog() {
     final s = widget.provider.strings;
+    final deliveryBoys = widget.provider.deliveryBoys;
+
+    if (deliveryBoys.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.amber,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  s.deliveryBoyRequiredTitle,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            s.createDeliveryBoyFirstPrompt,
+            style: const TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(s.tr('Cancel', 'रद्द करें')),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E3A8A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              icon: const Icon(Icons.person_add, size: 18),
+              label: Text(s.tr('Add Delivery Boy', 'हॉकर जोड़ें')),
+              onPressed: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DeliveryBoysScreen(provider: widget.provider),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
     final nameCtrl = TextEditingController();
-    String? selectedBoyId;
+    String? selectedBoyId = deliveryBoys.first.id;
+    String? nameError;
+    String? boyError;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDlgState) {
-          final deliveryBoys = widget.provider.deliveryBoys;
-
           return AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -67,12 +138,25 @@ class _ManageBlocksScreenState extends State<ManageBlocksScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    s.blockNameLabel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        s.blockNameLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        '*',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   TextField(
@@ -81,6 +165,7 @@ class _ManageBlocksScreenState extends State<ManageBlocksScreen> {
                     textCapitalization: TextCapitalization.words,
                     decoration: InputDecoration(
                       hintText: s.blockNameHint,
+                      errorText: nameError,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -90,19 +175,38 @@ class _ManageBlocksScreenState extends State<ManageBlocksScreen> {
                         vertical: 12,
                       ),
                     ),
+                    onChanged: (_) {
+                      if (nameError != null) {
+                        setDlgState(() => nameError = null);
+                      }
+                    },
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    s.assignDeliveryBoyLabel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        s.assignDeliveryBoyLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        '*',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<String?>(
+                  DropdownButtonFormField<String>(
                     value: selectedBoyId,
                     decoration: InputDecoration(
+                      errorText: boyError,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -112,27 +216,19 @@ class _ManageBlocksScreenState extends State<ManageBlocksScreen> {
                         vertical: 12,
                       ),
                     ),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
+                    items: deliveryBoys.map(
+                      (boy) => DropdownMenuItem<String>(
+                        value: boy.id,
                         child: Text(
-                          s.unassignedOption,
-                          style: TextStyle(color: Colors.grey.shade600),
+                          boy.name,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
-                      ...deliveryBoys.map(
-                        (boy) => DropdownMenuItem<String?>(
-                          value: boy.id,
-                          child: Text(
-                            boy.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ).toList(),
                     onChanged: (val) {
                       setDlgState(() {
                         selectedBoyId = val;
+                        boyError = null;
                       });
                     },
                   ),
@@ -156,7 +252,23 @@ class _ManageBlocksScreenState extends State<ManageBlocksScreen> {
                 label: Text(s.tr('Save Block', 'ब्लॉक सहेजें')),
                 onPressed: () async {
                   final name = nameCtrl.text.trim();
-                  if (name.isEmpty) return;
+                  bool hasError = false;
+
+                  if (name.isEmpty) {
+                    setDlgState(() {
+                      nameError = s.blockNameRequired;
+                    });
+                    hasError = true;
+                  }
+
+                  if (selectedBoyId == null || selectedBoyId!.isEmpty) {
+                    setDlgState(() {
+                      boyError = s.selectDeliveryBoyMandatory;
+                    });
+                    hasError = true;
+                  }
+
+                  if (hasError) return;
 
                   Navigator.pop(ctx);
                   await widget.provider.addCustomBlock(

@@ -1162,7 +1162,10 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
             onPressed: () {
               final val = ctrl.text.trim();
               if (val.isNotEmpty) {
-                widget.provider.addCustomBlock(val);
+                widget.provider.addCustomBlock(
+                  val,
+                  assignToBoyId: widget.deliveryBoy?.id,
+                );
                 _toggleBlock(val, true);
               }
               Navigator.pop(ctx);

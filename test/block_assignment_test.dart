@@ -288,6 +288,45 @@ void main() {
 
       expect(provider.allManagedBlocks, contains('Block D'));
       expect(find.text('Block D'), findsOneWidget);
+
+      // Verify Block D was mandatorily assigned to the delivery boy
+      final boy = provider.deliveryBoys.first;
+      expect(boy.assignedBlocks, contains('Block D'));
+    });
+
+    testWidgets('Block creation requires delivery boy and alerts when none exist',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final storage = await LocalStorageService.init(inMemoryForTests: true);
+      final provider = DeliveryProvider(storage);
+      final owner = provider.allUsers.firstWhere((u) => u.isOwner);
+      await provider.switchUser(owner);
+
+      // Remove all delivery boys to simulate zero delivery boys
+      final boys = List<AppUser>.from(provider.deliveryBoys);
+      for (final boy in boys) {
+        await provider.deleteDeliveryBoy(boy.id);
+      }
+      expect(provider.deliveryBoys.isEmpty, isTrue);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ManageBlocksScreen(provider: provider),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final addBlockBtn = find.text(provider.strings.addNewBlockBtn);
+      await tester.tap(addBlockBtn);
+      await tester.pumpAndSettle();
+
+      // Alert dialog informing user that delivery boy is required must be shown
+      expect(find.text(provider.strings.deliveryBoyRequiredTitle), findsOneWidget);
+      expect(find.text(provider.strings.createDeliveryBoyFirstPrompt), findsOneWidget);
+      expect(find.text(provider.strings.tr('Add Delivery Boy', 'हॉकर जोड़ें')), findsOneWidget);
     });
 
     testWidgets('HomeScreen shows Manage Blocks button and chip for Owner',

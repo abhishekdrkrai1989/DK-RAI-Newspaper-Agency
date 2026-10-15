@@ -468,4 +468,16 @@ class AppStrings {
         'No blocks have been assigned to you. Contact Admin.',
         'आपको कोई ब्लॉक आवंटित नहीं किया गया है। कृपया एडमिन से संपर्क करें।',
       );
+  String get deliveryBoyRequiredTitle =>
+      tr('Delivery Boy Required', 'हॉकर का होना आवश्यक है');
+  String get createDeliveryBoyFirstPrompt => tr(
+        'Please create at least one delivery boy first before adding blocks. Every block must be assigned to an existing delivery boy.',
+        'ब्लॉक बनाने से पहले कृपया कम से कम एक हॉकर बनाएं। प्रत्येक ब्लॉक के लिए हॉकर का चयन अनिवार्य है।',
+      );
+  String get blockNameRequired =>
+      tr('Block name is required', 'ब्लॉक का नाम अनिवार्य है');
+  String get selectDeliveryBoyMandatory =>
+      tr('Assigning a delivery boy is mandatory', 'हॉकर का चयन अनिवार्य है');
+  String get selectDeliveryBoyPrompt =>
+      tr('Select Delivery Boy', 'हॉकर चुनें');
 }
