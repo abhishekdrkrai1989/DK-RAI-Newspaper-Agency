@@ -173,5 +173,44 @@ void main() {
       expect(find.text('Edit Admin Profile & PIN'), findsOneWidget);
       expect(find.text('New 4-Digit Login PIN'), findsOneWidget);
     });
+
+    testWidgets(
+        'Delivery boy form sheet synchronizes assigned block in area box and omits extra block chips',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DeliveryBoysScreen(provider: provider),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap Edit button on Ramesh card (assigned Block A)
+      final editBtn = find.widgetWithText(OutlinedButton, 'Edit');
+      await tester.tap(editBtn);
+      await tester.pumpAndSettle();
+
+      // Find the Assigned Area text field
+      final areaField = find.widgetWithText(
+        TextFormField,
+        provider.strings.assignedAreaRoute,
+      );
+      expect(areaField, findsOneWidget);
+
+      // Verify Assigned Block 'Block A' is displayed in the Assigned Area box
+      final formField = tester.widget<TextFormField>(areaField);
+      expect(formField.controller?.text.contains('Block A'), isTrue);
+
+      // Verify that extra block chips (ActionChip with Block A) below this box are NOT present
+      // Only FilterChips inside the Assigned Blocks section exist for blocks
+      final actionChipsWithBlock = find.ancestor(
+        of: find.text('Block A'),
+        matching: find.byType(ActionChip),
+      );
+      expect(actionChipsWithBlock, findsNothing);
+    });
   });
 }

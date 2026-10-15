@@ -121,13 +121,28 @@ class AppUser {
       }
     }
 
+    // Ensure assignedArea includes assigned blocks for delivery boys
+    String finalAssignedArea = assignedArea;
+    if (role == UserRole.deliveryBoy && assignedBlocks.isNotEmpty) {
+      if (finalAssignedArea.trim().isEmpty) {
+        finalAssignedArea = assignedBlocks.join(', ');
+      } else {
+        final missing = assignedBlocks.where(
+          (b) => !finalAssignedArea.toLowerCase().contains(b.toLowerCase()),
+        );
+        if (missing.isNotEmpty) {
+          finalAssignedArea = '${missing.join(", ")}, $finalAssignedArea';
+        }
+      }
+    }
+
     return AppUser(
       id: json['id'] as String? ?? 'user_owner',
       name: json['name'] as String? ?? 'D K Rai',
       role: role,
       pin: json['pin'] as String? ?? '1234',
       phone: json['phone'] as String? ?? '',
-      assignedArea: assignedArea,
+      assignedArea: finalAssignedArea,
       assignedBlocks: assignedBlocks,
       isActive: json['isActive'] as bool? ??
           json['is_active'] as bool? ??

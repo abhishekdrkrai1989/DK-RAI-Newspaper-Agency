@@ -1098,7 +1098,16 @@ class DeliveryProvider extends ChangeNotifier {
         // Add to this delivery boy if not already present
         if (!user.assignedBlocks.any((b) => b.trim().toLowerCase() == lower)) {
           final updatedBlocks = [...user.assignedBlocks, targetBlock]..sort();
-          _users[i] = user.copyWith(assignedBlocks: updatedBlocks);
+          String updatedArea = user.assignedArea;
+          if (updatedArea.trim().isEmpty) {
+            updatedArea = targetBlock;
+          } else if (!updatedArea.toLowerCase().contains(lower)) {
+            updatedArea = '$targetBlock, $updatedArea';
+          }
+          _users[i] = user.copyWith(
+            assignedBlocks: updatedBlocks,
+            assignedArea: updatedArea,
+          );
           usersModified = true;
         }
       } else {
@@ -1107,7 +1116,15 @@ class DeliveryProvider extends ChangeNotifier {
           final updatedBlocks = user.assignedBlocks
               .where((b) => b.trim().toLowerCase() != lower)
               .toList();
-          _users[i] = user.copyWith(assignedBlocks: updatedBlocks);
+          final parts = user.assignedArea
+              .split(',')
+              .map((p) => p.trim())
+              .where((p) => p.isNotEmpty && p.toLowerCase() != lower)
+              .toList();
+          _users[i] = user.copyWith(
+            assignedBlocks: updatedBlocks,
+            assignedArea: parts.join(', '),
+          );
           usersModified = true;
         }
       }

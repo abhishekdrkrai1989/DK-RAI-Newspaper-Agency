@@ -1062,11 +1062,50 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
     _pinCtrl = TextEditingController(
       text: boy?.pin ?? _generateRandomPin(),
     );
-    _areaCtrl = TextEditingController(text: boy?.assignedArea ?? '');
+    _selectedBlocks = Set<String>.from(boy?.assignedBlocks ?? []);
+
+    String initialArea = boy?.assignedArea ?? '';
+    if (_selectedBlocks.isNotEmpty) {
+      if (initialArea.trim().isEmpty) {
+        initialArea = (_selectedBlocks.toList()..sort()).join(', ');
+      } else {
+        final missing = _selectedBlocks.where(
+          (b) => !initialArea.toLowerCase().contains(b.toLowerCase()),
+        );
+        if (missing.isNotEmpty) {
+          initialArea = '${missing.join(", ")}, $initialArea';
+        }
+      }
+    }
+    _areaCtrl = TextEditingController(text: initialArea);
     _vehicleCtrl = TextEditingController(text: boy?.vehicleNumber ?? '');
     _notesCtrl = TextEditingController(text: boy?.notes ?? '');
     _isActive = boy?.isActive ?? true;
-    _selectedBlocks = Set<String>.from(boy?.assignedBlocks ?? []);
+  }
+
+  void _toggleBlock(String blk, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedBlocks.add(blk);
+        final currentText = _areaCtrl.text.trim();
+        if (currentText.isEmpty) {
+          _areaCtrl.text = blk;
+        } else if (!currentText.toLowerCase().contains(blk.toLowerCase())) {
+          _areaCtrl.text = '$currentText, $blk';
+        }
+      } else {
+        _selectedBlocks.removeWhere(
+          (b) => b.trim().toLowerCase() == blk.trim().toLowerCase(),
+        );
+        final lower = blk.trim().toLowerCase();
+        final parts = _areaCtrl.text
+            .split(',')
+            .map((p) => p.trim())
+            .where((p) => p.isNotEmpty && p.toLowerCase() != lower)
+            .toList();
+        _areaCtrl.text = parts.join(', ');
+      }
+    });
   }
 
   @override
@@ -1124,9 +1163,7 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
               final val = ctrl.text.trim();
               if (val.isNotEmpty) {
                 widget.provider.addCustomBlock(val);
-                setState(() {
-                  _selectedBlocks.add(val);
-                });
+                _toggleBlock(val, true);
               }
               Navigator.pop(ctx);
             },
@@ -1145,13 +1182,26 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
         ? 'user_delivery_${DateTime.now().millisecondsSinceEpoch}'
         : widget.deliveryBoy!.id;
 
+    String finalArea = _areaCtrl.text.trim();
+    if (_selectedBlocks.isNotEmpty) {
+      if (finalArea.isEmpty) {
+        finalArea = (_selectedBlocks.toList()..sort()).join(', ');
+      } else {
+        for (final blk in _selectedBlocks) {
+          if (!finalArea.toLowerCase().contains(blk.toLowerCase())) {
+            finalArea = '$finalArea, $blk';
+          }
+        }
+      }
+    }
+
     final updatedBoy = AppUser(
       id: boyId,
       name: _nameCtrl.text.trim(),
       role: UserRole.deliveryBoy,
       pin: _pinCtrl.text.trim(),
       phone: _phoneCtrl.text.trim(),
-      assignedArea: _areaCtrl.text.trim(),
+      assignedArea: finalArea,
       assignedBlocks: _selectedBlocks.toList()..sort(),
       isActive: _isActive,
       vehicleNumber: _vehicleCtrl.text.trim(),
@@ -1176,7 +1226,6 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
     final s = widget.provider.strings;
     final isEdit = widget.deliveryBoy != null;
     final societies = widget.provider.availableAreas;
-    final blocks = widget.provider.allUniqueBlocks;
 
     return Container(
       decoration: const BoxDecoration(
@@ -1375,17 +1424,18 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                 ),
               ),
 
-              // Quick suggestions chips for Societies / Blocks
-              if (societies.isNotEmpty || blocks.isNotEmpty) ...[
+              // Quick suggestions chips for Societies / Colonies only
+              if (societies.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      ...societies.take(4).map((soc) => Padding(
+                      ...societies.map((soc) => Padding(
                             padding: const EdgeInsets.only(right: 6),
                             child: ActionChip(
                               visualDensity: VisualDensity.compact,
+                              avatar: const Icon(Icons.apartment, size: 12),
                               label: Text(
                                 soc,
                                 style: const TextStyle(fontSize: 11),
@@ -1395,23 +1445,6 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                                   _areaCtrl.text = soc;
                                 } else if (!_areaCtrl.text.contains(soc)) {
                                   _areaCtrl.text = '${_areaCtrl.text}, $soc';
-                                }
-                              },
-                            ),
-                          )),
-                      ...blocks.take(4).map((blk) => Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: ActionChip(
-                              visualDensity: VisualDensity.compact,
-                              label: Text(
-                                blk,
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                              onPressed: () {
-                                if (_areaCtrl.text.isEmpty) {
-                                  _areaCtrl.text = blk;
-                                } else if (!_areaCtrl.text.contains(blk)) {
-                                  _areaCtrl.text = '${_areaCtrl.text}, $blk';
                                 }
                               },
                             ),
@@ -1428,7 +1461,8 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.domain, size: 16, color: Color(0xFF1E3A8A)),
+                      const Icon(Icons.domain,
+                          size: 16, color: Color(0xFF1E3A8A)),
                       const SizedBox(width: 6),
                       Text(
                         s.assignedBlocksLabel,
@@ -1461,7 +1495,8 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                       'No blocks created yet. Tap + Add Block.',
                       'कोई ब्लॉक नहीं है। + नया ब्लॉक दबाएं।',
                     ),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    style:
+                        TextStyle(fontSize: 12, color: Colors.grey.shade500),
                   ),
                 )
               else
@@ -1470,7 +1505,8 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                   runSpacing: 6,
                   children: widget.provider.allManagedBlocks.map((blk) {
                     final isSel = _selectedBlocks.any(
-                      (b) => b.trim().toLowerCase() == blk.trim().toLowerCase(),
+                      (b) =>
+                          b.trim().toLowerCase() == blk.trim().toLowerCase(),
                     );
                     return FilterChip(
                       avatar: Icon(
@@ -1487,19 +1523,7 @@ class _DeliveryBoyFormSheetState extends State<_DeliveryBoyFormSheet> {
                         fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
                         fontSize: 12,
                       ),
-                      onSelected: (val) {
-                        setState(() {
-                          if (val) {
-                            _selectedBlocks.add(blk);
-                          } else {
-                            _selectedBlocks.removeWhere(
-                              (b) =>
-                                  b.trim().toLowerCase() ==
-                                  blk.trim().toLowerCase(),
-                            );
-                          }
-                        });
-                      },
+                      onSelected: (val) => _toggleBlock(blk, val),
                     );
                   }).toList(),
                 ),
