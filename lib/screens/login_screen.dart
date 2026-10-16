@@ -46,6 +46,15 @@ class _LoginScreenState extends State<LoginScreen> {
     final user = _selectedUser;
     if (user == null) return;
 
+    if (quickLogin && !user.isOwner) {
+      setState(() {
+        _errorMessage = widget.provider.strings.isHindi
+            ? 'त्वरित लॉगिन केवल एडमिन/मालिक के लिए उपलब्ध है'
+            : 'Instant Login is available only for Admin/Owner';
+      });
+      return;
+    }
+
     final pinToTry = quickLogin ? user.pin : _pinController.text.trim();
 
     if (pinToTry.isEmpty) {
@@ -159,7 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
 
                   Text(
-                    'D K Rai Newspaper Agency',
+                    s.appTitle,
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.bold,
@@ -530,27 +539,29 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            side: const BorderSide(color: Color(0xFF94A3B8)),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        if (_selectedUser?.isOwner == true) ...[
+                          const SizedBox(height: 10),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF94A3B8)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            onPressed: () => _handleLogin(quickLogin: true),
+                            icon: const Icon(Icons.flash_on,
+                                size: 18, color: Color(0xFFD97706)),
+                            label: Text(
+                              s.quickDemoLogin,
+                              style: const TextStyle(
+                                color: Color(0xFF334155),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                          onPressed: () => _handleLogin(quickLogin: true),
-                          icon: const Icon(Icons.flash_on,
-                              size: 18, color: Color(0xFFD97706)),
-                          label: Text(
-                            s.quickDemoLogin,
-                            style: const TextStyle(
-                              color: Color(0xFF334155),
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
+                        ],
                       ],
                     ),
                   ),

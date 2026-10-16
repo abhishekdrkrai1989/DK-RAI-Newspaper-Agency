@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../models/approval_request.dart';
 import '../models/customer.dart';
 import '../models/publication.dart';
 import '../providers/delivery_provider.dart';
 import '../widgets/pause_paper_dialog.dart';
+import 'approvals_screen.dart';
 import 'customer_form_screen.dart';
 
 class CustomerDetailScreen extends StatelessWidget {
@@ -87,8 +89,19 @@ class CustomerDetailScreen extends StatelessWidget {
                       ),
                     );
                     if (confirm == true && context.mounted) {
+                      final isBoy = !provider.isOwner;
                       await provider.deleteCustomer(customer.id);
-                      if (context.mounted) Navigator.of(context).pop();
+                      if (context.mounted) {
+                        if (isBoy) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(s.deletionPendingAdminApproval),
+                              backgroundColor: Colors.amber.shade800,
+                            ),
+                          );
+                        }
+                        Navigator.of(context).pop();
+                      }
                     }
                   },
                 ),
@@ -123,6 +136,84 @@ class CustomerDetailScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+              if (provider.hasPendingApproval(customer.id)) ...[
+                Builder(
+                  builder: (_) {
+                    final pendingReq = provider.getPendingApprovalForCustomer(customer.id);
+                    if (pendingReq == null) return const SizedBox.shrink();
+                    final isDelete = pendingReq.actionType == ApprovalActionType.deleteCustomer;
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDelete ? const Color(0xFFFEF2F2) : const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDelete ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isDelete ? Icons.warning_amber_rounded : Icons.hourglass_top_rounded,
+                            size: 22,
+                            color: isDelete ? const Color(0xFFDC2626) : const Color(0xFFB45309),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s.pendingForApprovalFlag,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDelete ? const Color(0xFF991B1B) : const Color(0xFF92400E),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${pendingReq.actionName(s)} (${pendingReq.requestedBy})',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDelete ? const Color(0xFFB91C1C) : const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (provider.isOwner)
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF1E3A8A),
+                                foregroundColor: Colors.white,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => ApprovalsScreen(provider: provider),
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                s.reviewApprovalBtn,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
               // Main Status Banner Card
               Card(
                 elevation: 2,
@@ -341,7 +432,21 @@ class CustomerDetailScreen extends StatelessWidget {
                                       customer: customer,
                                     );
                                   } else {
+                                    final isBoy = !provider.isOwner;
                                     provider.startCustomerPaper(customer.id);
+                                    if (isBoy && context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            s.tr(
+                                              'Start request submitted for Admin/Owner approval',
+                                              'अखबार शुरू करने का अनुरोध एडमिन मंज़ूरी के लिए भेजा गया',
+                                            ),
+                                          ),
+                                          backgroundColor: Colors.amber.shade800,
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                         ),

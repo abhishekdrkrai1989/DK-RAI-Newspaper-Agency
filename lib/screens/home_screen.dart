@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../l10n/app_strings.dart';
+import '../models/approval_request.dart';
 import '../models/customer.dart';
 import '../models/publication.dart';
 import '../providers/delivery_provider.dart';
@@ -140,7 +141,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             actions: [
-              // Bilingual Toggle Pill (English <-> Hindi)
+              // 1. Language Toggle Pill (English <-> Hindi)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
                 child: OutlinedButton.icon(
@@ -164,39 +165,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: p.toggleLanguage,
                 ),
               ),
-              if (p.isOwner) ...[
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(6),
-                  tooltip: s.manageBlocksTitle,
-                  icon: const Icon(Icons.domain_add, color: Colors.amberAccent),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ManageBlocksScreen(provider: p),
-                      ),
-                    );
-                  },
-                ),
-                IconButton(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.all(6),
-                  tooltip: s.manageDeliveryBoysTitle,
-                  icon: const Icon(Icons.two_wheeler, color: Colors.amberAccent),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => DeliveryBoysScreen(provider: p),
-                      ),
-                    );
-                  },
-                ),
+
+              // 2. Approvals Button (Only for Admin/Owner, with live pending badge)
+              if (p.isOwner)
                 Stack(
                   alignment: Alignment.center,
                   children: [
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.all(6),
                       tooltip: s.approvalsTitle,
                       icon: const Icon(Icons.approval, color: Colors.amberAccent),
                       onPressed: () {
@@ -234,111 +210,185 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                   ],
                 ),
-              ],
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.cloudSyncTooltip,
-                icon: Icon(
-                  p.isSyncing
-                      ? Icons.sync
-                      : (p.isCloudConfigured
-                          ? Icons.cloud_done
-                          : Icons.cloud_queue),
-                  color: p.isCloudConfigured
-                      ? Colors.greenAccent
-                      : Colors.white,
+
+              // 3. More Menu (Popup menu containing all administrative & reporting screens for Owner)
+              if (p.isOwner)
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  tooltip: s.tr('More Options', 'और विकल्प'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (val) {
+                    switch (val) {
+                      case 'blocks':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => ManageBlocksScreen(provider: p),
+                        ));
+                        break;
+                      case 'hawkers':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => DeliveryBoysScreen(provider: p),
+                        ));
+                        break;
+                      case 'approvals':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => ApprovalsScreen(provider: p),
+                        ));
+                        break;
+                      case 'cloud_sync':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => CloudSyncScreen(provider: p),
+                        ));
+                        break;
+                      case 'hawker_report':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => NewspaperReportScreen(provider: p),
+                        ));
+                        break;
+                      case 'block_consumption':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => BlockWiseConsumptionScreen(provider: p),
+                        ));
+                        break;
+                      case 'morning_list':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => MorningDeliveryListScreen(provider: p),
+                        ));
+                        break;
+                      case 'billing_report':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => MonthlyBillingReportScreen(provider: p),
+                        ));
+                        break;
+                      case 'publications':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => PublicationsScreen(provider: p),
+                        ));
+                        break;
+                      case 'switch_user':
+                        _showUserSwitchDialog(context, p);
+                        break;
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    PopupMenuItem(
+                      value: 'blocks',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.domain_add, color: Color(0xFF1E3A8A), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.manageBlocksTitle)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'hawkers',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.two_wheeler, color: Color(0xFF059669), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.manageDeliveryBoysTitle)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'approvals',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.approval, color: Color(0xFFD97706), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text('${s.approvalsTitle} (${p.pendingApprovalsCount})')),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'cloud_sync',
+                      child: Row(
+                        children: [
+                          Icon(
+                            p.isCloudConfigured ? Icons.cloud_done : Icons.cloud_queue,
+                            color: p.isCloudConfigured ? Colors.green : Colors.grey,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.cloudSyncTooltip)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'hawker_report',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.assessment, color: Colors.indigo, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.tr('Hawker & Area Report', 'हॉकर व क्षेत्र रिपोर्ट'))),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'morning_list',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.list_alt, color: Color(0xFF1E3A8A), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.generateMorningListBtn)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'billing_report',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.receipt_long, color: Colors.teal, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.monthlyBillingBtn)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'block_consumption',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.analytics_outlined, color: Colors.blue, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.blockConsumptionBtn)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'publications',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.newspaper, color: Colors.orange, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.managePublications)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: 'switch_user',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.swap_horiz, color: Color(0xFF3B82F6), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(s.tr('Switch User', 'उपयोगकर्ता बदलें'))),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CloudSyncScreen(provider: p),
-                    ),
-                  );
-                },
-              ),
+
+              // 4. Dedicated LOGOUT BUTTON (Always visible at top-right, never hides!)
               IconButton(
                 visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.tr(
-                  'Hawker & Area Newspaper Report',
-                  'हॉकर व क्षेत्र अखबार रिपोर्ट',
+                tooltip: s.tr('Logout', 'लॉगआउट'),
+                icon: const Icon(
+                  Icons.logout_rounded,
+                  color: Color(0xFFFCA5A5),
                 ),
-                icon: const Icon(Icons.assessment, color: Colors.amberAccent),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => NewspaperReportScreen(provider: p),
-                    ),
-                  );
-                },
+                onPressed: () => _confirmLogout(context, p),
               ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.blockConsumptionBtn,
-                icon: const Icon(Icons.analytics_outlined),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => BlockWiseConsumptionScreen(provider: p),
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.generateMorningListBtn,
-                icon: const Icon(Icons.list_alt),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => MorningDeliveryListScreen(provider: p),
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.monthlyBillingBtn,
-                icon: const Icon(Icons.receipt_long),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => MonthlyBillingReportScreen(provider: p),
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.managePublications,
-                icon: const Icon(Icons.newspaper),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PublicationsScreen(provider: p),
-                    ),
-                  );
-                },
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                tooltip: s.logoutBtn,
-                icon: Icon(
-                  p.isOwner
-                      ? Icons.admin_panel_settings
-                      : Icons.delivery_dining,
-                  color: p.isOwner
-                      ? Colors.amberAccent
-                      : Colors.greenAccent,
-                ),
-                onPressed: () => _showUserSwitchDialog(context, p),
-              ),
+              const SizedBox(width: 4),
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
@@ -1097,6 +1147,39 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               },
                             ),
+                            const SizedBox(width: 8),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: p.pendingApprovalsCount > 0
+                                    ? const Color(0xFFDC2626)
+                                    : const Color(0xFFD97706),
+                                foregroundColor: Colors.white,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 10,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.approval, size: 16),
+                              label: Text(
+                                '${s.approvalsTitle} (${p.pendingApprovalsCount})',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        ApprovalsScreen(provider: p),
+                                  ),
+                                );
+                              },
+                            ),
                           ],
                         ],
                       ),
@@ -1141,6 +1224,18 @@ class _HomeScreenState extends State<HomeScreen> {
                             onSelected: () =>
                                 p.setFilter(DistributionFilter.pendingToday),
                           ),
+                          if (p.pendingApprovalCustomersCount > 0) ...[
+                            const SizedBox(width: 6),
+                            _FilterTabChip(
+                              label:
+                                  '${s.filterPendingApproval} (${p.pendingApprovalCustomersCount})',
+                              selected:
+                                  p.filter == DistributionFilter.pendingApproval,
+                              activeColor: const Color(0xFFD97706),
+                              onSelected: () =>
+                                  p.setFilter(DistributionFilter.pendingApproval),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1387,6 +1482,53 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Future<void> _confirmLogout(BuildContext context, DeliveryProvider p) async {
+    final s = p.strings;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: Color(0xFFDC2626)),
+            const SizedBox(width: 8),
+            Text(s.confirmLogoutTitle),
+          ],
+        ),
+        content: Text(
+          s.tr(
+            'Are you sure you want to log out of ${p.currentUser?.name ?? "the app"}?',
+            'क्या आप ${p.currentUser?.name ?? "ऐप"} से लॉगआउट करना चाहते हैं?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.cancel),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(s.tr('Logout', 'लॉगआउट')),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await p.logout();
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => LoginScreen(provider: p)),
+          (route) => false,
+        );
+      }
+    }
+  }
 }
 
 class _LocationFilterChip extends StatelessWidget {
@@ -1558,6 +1700,7 @@ class _CustomerDistributionCard extends StatelessWidget {
     final date = provider.selectedDate;
     final isStarted = customer.isStartedOnDate(date);
     final isDelivered = customer.isDeliveredOnDate(date);
+    final pendingReq = provider.getPendingApprovalForCustomer(customer.id);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1565,10 +1708,14 @@ class _CustomerDistributionCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isStarted
-              ? (isDelivered ? Colors.teal.shade300 : Colors.green.shade200)
-              : Colors.orange.shade300,
-          width: 1.2,
+          color: pendingReq != null
+              ? (pendingReq.actionType == ApprovalActionType.deleteCustomer
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFFF59E0B))
+              : (isStarted
+                  ? (isDelivered ? Colors.teal.shade300 : Colors.green.shade200)
+                  : Colors.orange.shade300),
+          width: pendingReq != null ? 1.8 : 1.2,
         ),
       ),
       child: InkWell(
@@ -1588,6 +1735,90 @@ class _CustomerDistributionCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Pending for Approval Flag Banner
+              if (pendingReq != null) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: pendingReq.actionType == ApprovalActionType.deleteCustomer
+                        ? const Color(0xFFFEF2F2)
+                        : const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: pendingReq.actionType == ApprovalActionType.deleteCustomer
+                          ? const Color(0xFFEF4444)
+                          : const Color(0xFFF59E0B),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        pendingReq.actionType == ApprovalActionType.deleteCustomer
+                            ? Icons.warning_amber_rounded
+                            : Icons.hourglass_top_rounded,
+                        size: 18,
+                        color: pendingReq.actionType == ApprovalActionType.deleteCustomer
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFFB45309),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              strings.pendingForApprovalFlag,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: pendingReq.actionType == ApprovalActionType.deleteCustomer
+                                    ? const Color(0xFF991B1B)
+                                    : const Color(0xFF92400E),
+                              ),
+                            ),
+                            Text(
+                              '${pendingReq.actionName(strings)} (${pendingReq.requestedBy})',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: pendingReq.actionType == ApprovalActionType.deleteCustomer
+                                    ? const Color(0xFFB91C1C)
+                                    : const Color(0xFFB45309),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (provider.isOwner)
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E3A8A),
+                            foregroundColor: Colors.white,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ApprovalsScreen(provider: provider),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            strings.reviewApprovalBtn,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
               // Top Row: Sequence #, House No + Block/Society Badges, Status Pill
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,

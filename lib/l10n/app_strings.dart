@@ -480,4 +480,18 @@ class AppStrings {
       tr('Assigning a delivery boy is mandatory', 'हॉकर का चयन अनिवार्य है');
   String get selectDeliveryBoyPrompt =>
       tr('Select Delivery Boy', 'हॉकर चुनें');
+  String get pendingForApprovalFlag =>
+      tr('Pending for Approval', 'मंज़ूरी के लिए लंबित');
+  String get confirmLogoutTitle =>
+      tr('Confirm Logout', 'लॉगआउट की पुष्टि करें');
+  String get confirmLogoutPrompt =>
+      tr('Are you sure you want to log out?', 'क्या आप लॉगआउट करना चाहते हैं?');
+  String get deletionPendingAdminApproval => tr(
+        'Deletion requested. Pending Admin/Owner approval.',
+        'हटाने का अनुरोध दर्ज किया गया। एडमिन/मालिक की मंज़ूरी लंबित है।',
+      );
+  String get filterPendingApproval =>
+      tr('Pending Approval', 'मंज़ूरी लंबित');
+  String get reviewApprovalBtn =>
+      tr('Review', 'देखें');
 }

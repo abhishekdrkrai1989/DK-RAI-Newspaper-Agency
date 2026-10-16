@@ -167,6 +167,7 @@ Future<void> showPausePaperDialog({
                 icon: const Icon(Icons.pause, size: 18),
                 label: Text(s.btnPausePaper),
                 onPressed: () async {
+                  final isBoy = !provider.isOwner;
                   await provider.pauseCustomerPaper(
                     customer.id,
                     pauseStartDate: useDateRange ? startDate : null,
@@ -174,6 +175,19 @@ Future<void> showPausePaperDialog({
                     reason: reasonController.text.trim(),
                   );
                   if (ctx.mounted) Navigator.of(ctx).pop();
+                  if (isBoy && context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          s.tr(
+                            'Pause request submitted for Admin/Owner approval',
+                            'अखबार बंद करने का अनुरोध एडमिन मंज़ूरी के लिए भेजा गया',
+                          ),
+                        ),
+                        backgroundColor: Colors.amber.shade800,
+                      ),
+                    );
+                  }
                 },
               ),
             ],

@@ -1,3 +1,5 @@
+import '../l10n/app_strings.dart';
+
 enum ApprovalActionType {
   pausePaper,
   startPaper,
@@ -46,6 +48,25 @@ class ApprovalRequest {
   bool get isPending => status == ApprovalStatus.pending;
   bool get isApproved => status == ApprovalStatus.approved;
   bool get isRejected => status == ApprovalStatus.rejected;
+
+  String actionName(AppStrings s) {
+    switch (actionType) {
+      case ApprovalActionType.addCustomer:
+        return s.tr('New Customer Added', 'नया ग्राहक जोड़ा गया');
+      case ApprovalActionType.editCustomer:
+        return s.tr('Customer Details Updated', 'ग्राहक विवरण बदला गया');
+      case ApprovalActionType.deleteCustomer:
+        return s.tr('Customer Deletion Requested', 'ग्राहक हटाने का अनुरोध');
+      case ApprovalActionType.startPaper:
+        return s.tr('Paper Resumed', 'अखबार चालू किया गया');
+      case ApprovalActionType.pausePaper:
+        return s.tr('Paper Paused', 'अखबार बंद किया गया');
+      case ApprovalActionType.addPublication:
+        return s.tr('Publication Added', 'अखबार/पत्रिका जोड़ी गई');
+      case ApprovalActionType.deletePublication:
+        return s.tr('Publication Deleted', 'अखबार/पत्रिका हटाई गई');
+    }
+  }
 
   ApprovalRequest copyWith({
     ApprovalStatus? status,

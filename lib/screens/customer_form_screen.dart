@@ -266,7 +266,28 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       }
       return;
     }
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) {
+      if (!widget.provider.isOwner) {
+        final isEdit = widget.existingCustomer != null;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isEdit
+                  ? s.tr(
+                      'Customer update submitted for Admin/Owner approval',
+                      'ग्राहक अपडेट एडमिन मंज़ूरी के लिए भेजा गया',
+                    )
+                  : s.tr(
+                      'New customer submitted for Admin/Owner approval',
+                      'नया ग्राहक एडमिन मंज़ूरी के लिए भेजा गया',
+                    ),
+            ),
+            backgroundColor: Colors.amber.shade800,
+          ),
+        );
+      }
+      Navigator.of(context).pop();
+    }
   }
 
   @override

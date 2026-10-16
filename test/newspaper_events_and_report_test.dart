@@ -30,18 +30,20 @@ void main() {
       await tester.pumpWidget(NewspaperDeliveryApp(provider: provider));
       await tester.pumpAndSettle();
 
-      // Open profile / switch user dialog from AppBar
-      final profileBtn = find.byIcon(Icons.admin_panel_settings);
-      expect(profileBtn, findsOneWidget);
-      await tester.tap(profileBtn);
+      // For Owner: More options menu (Icons.more_vert) and Logout button MUST be visible
+      final moreMenuBtn = find.byIcon(Icons.more_vert);
+      expect(moreMenuBtn, findsOneWidget);
+      expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
+
+      // Tap more options menu
+      await tester.tap(moreMenuBtn);
       await tester.pumpAndSettle();
 
-      // For Owner: Switch user header and cards MUST be visible
-      expect(find.text('Switch User (Admin Only)'), findsOneWidget);
-      expect(find.byIcon(Icons.logout), findsOneWidget);
+      // For Owner: Switch User option MUST be visible in the menu
+      expect(find.text('Switch User'), findsOneWidget);
 
-      // Close bottom sheet
-      Navigator.of(tester.element(find.byIcon(Icons.logout))).pop();
+      // Close menu by tapping outside
+      await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 
       // 2. Switch to Delivery Boy
@@ -49,16 +51,12 @@ void main() {
       await provider.switchUser(boy);
       await tester.pumpAndSettle();
 
-      // Tap Delivery Boy profile icon (in AppBar)
-      final boyProfileBtn = find.byIcon(Icons.delivery_dining).last;
-      await tester.tap(boyProfileBtn);
-      await tester.pumpAndSettle();
+      // For Delivery Boy: More Menu containing "Switch User" MUST NOT be shown
+      expect(find.byIcon(Icons.more_vert), findsNothing);
+      expect(find.text('Switch User'), findsNothing);
 
-      // For Delivery Boy: "Switch User" section MUST NOT be shown
-      expect(find.text('Switch User (Admin Only)'), findsNothing);
-      // Only Logout is available
-      expect(find.byIcon(Icons.logout), findsOneWidget);
-      expect(find.text(boy.name), findsWidgets);
+      // Dedicated Logout button is present for Delivery Boy
+      expect(find.byIcon(Icons.logout_rounded), findsOneWidget);
     });
   });
 

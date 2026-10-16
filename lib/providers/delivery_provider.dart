@@ -14,6 +14,7 @@ enum DistributionFilter {
   started,
   paused,
   pendingToday,
+  pendingApproval,
 }
 
 class DeliveryProvider extends ChangeNotifier {
@@ -63,10 +64,8 @@ class DeliveryProvider extends ChangeNotifier {
     _autoSync = _storage.loadAutoSync();
     _lastSyncTime = _storage.loadLastSyncTime();
     _users = List<AppUser>.from(_storage.loadUsers());
-    _currentUser = _storage.loadCurrentUser();
-    if (_currentUser != null) {
-      _adjustLocationFiltersForUser(_currentUser!);
-    }
+    // On launching app, first login page should be on screen (User Requirement 1)
+    _currentUser = null;
     _approvalRequests = _storage.loadApprovalRequests();
 
     // Automatically connect and sync with Supabase cloud DB on launch
@@ -138,6 +137,19 @@ class DeliveryProvider extends ChangeNotifier {
   List<ApprovalRequest> get pendingApprovals =>
       _approvalRequests.where((r) => r.isPending).toList();
   int get pendingApprovalsCount => pendingApprovals.length;
+
+  ApprovalRequest? getPendingApprovalForCustomer(String customerId) {
+    for (final req in _approvalRequests) {
+      if (req.isPending && req.targetId == customerId) {
+        return req;
+      }
+    }
+    return null;
+  }
+
+  bool hasPendingApproval(String customerId) {
+    return getPendingApprovalForCustomer(customerId) != null;
+  }
 
   String get supabaseUrl => _supabaseUrl;
   String get supabaseAnonKey => _supabaseAnonKey;
@@ -300,6 +312,9 @@ class DeliveryProvider extends ChangeNotifier {
           if (c.totalCopiesOnDate(_selectedDate) == 0) return false;
           if (c.isDeliveredOnDate(_selectedDate)) return false;
           break;
+        case DistributionFilter.pendingApproval:
+          if (!hasPendingApproval(c.id)) return false;
+          break;
       }
 
       if (q.isNotEmpty) {
@@ -336,6 +351,10 @@ class DeliveryProvider extends ChangeNotifier {
 
   int get pausedCustomersCount => _locationFilteredCustomers
       .where((c) => !c.isStartedOnDate(_selectedDate))
+      .length;
+
+  int get pendingApprovalCustomersCount => _locationFilteredCustomers
+      .where((c) => hasPendingApproval(c.id))
       .length;
 
   int get totalDeliverableCopiesForDate => _locationFilteredCustomers.fold<int>(
@@ -661,6 +680,7 @@ class DeliveryProvider extends ChangeNotifier {
     }
 
     final isNew = index < 0;
+    final previousCustomerJson = index >= 0 ? _customers[index].toJson() : null;
     if (index >= 0) {
       _customers[index] = customer;
     } else {
@@ -695,16 +715,16 @@ class DeliveryProvider extends ChangeNotifier {
     notifyListeners();
     _triggerAutoSync();
     _recordDeliveryBoyAction(
-      actionType: index >= 0
-          ? ApprovalActionType.editCustomer
-          : ApprovalActionType.addCustomer,
-      title: index >= 0
-          ? 'Customer Updated: ${customer.name}'
-          : 'New Customer Added: ${customer.name}',
+      actionType: isNew
+          ? ApprovalActionType.addCustomer
+          : ApprovalActionType.editCustomer,
+      title: isNew
+          ? 'New Customer Added: ${customer.name}'
+          : 'Customer Updated: ${customer.name}',
       description:
           'House No: ${customer.houseNumber}, Block: ${customer.block}, Area: ${customer.area}',
       targetId: customer.id,
-      payload: customer.toJson(),
+      payload: previousCustomerJson ?? customer.toJson(),
     );
     return true;
   }
@@ -720,6 +740,21 @@ class DeliveryProvider extends ChangeNotifier {
 
     final deletedCust = _customers[index];
     final custName = '${deletedCust.name} (${deletedCust.houseNumber})';
+
+    if (isDeliveryBoy) {
+      // For Delivery Boy: DO NOT remove customer immediately.
+      // Record approval request and mark pending approval so it displays the flag until approved.
+      _recordDeliveryBoyAction(
+        actionType: ApprovalActionType.deleteCustomer,
+        title: 'Customer Deletion: $custName',
+        description: 'Delivery boy requested deletion of customer $custName',
+        targetId: customerId,
+        payload: deletedCust.toJson(),
+      );
+      notifyListeners();
+      return true;
+    }
+
     _customers.removeWhere((c) => c.id == customerId);
     await _storage.saveCustomers(_customers);
 
@@ -751,13 +786,6 @@ class DeliveryProvider extends ChangeNotifier {
       anonKey: _supabaseAnonKey,
       customerId: customerId,
     ).catchError((_) => false);
-    _recordDeliveryBoyAction(
-      actionType: ApprovalActionType.deleteCustomer,
-      title: 'Customer Deleted: $custName',
-      description: 'Removed customer from delivery route',
-      targetId: customerId,
-      payload: deletedCust.toJson(),
-    );
     return true;
   }
 
@@ -1297,6 +1325,40 @@ class DeliveryProvider extends ChangeNotifier {
     );
 
     _approvalRequests[index] = updated;
+
+    if (current.actionType == ApprovalActionType.deleteCustomer) {
+      final targetIdx = _customers.indexWhere((c) => c.id == current.targetId);
+      if (targetIdx >= 0) {
+        final deletedCust = _customers.removeAt(targetIdx);
+        await _storage.saveCustomers(_customers);
+        for (final sub in deletedCust.subscriptions) {
+          final pub = getPublicationById(sub.publicationId);
+          final pubName = pub?.nameEn ?? sub.publicationId;
+          await recordNewspaperEvent(
+            eventType: NewspaperEventType.deleted,
+            customerId: deletedCust.id,
+            customerName: deletedCust.name,
+            houseNumber: deletedCust.houseNumber,
+            block: deletedCust.block,
+            area: deletedCust.area,
+            deliveryBoyId: deletedCust.deliveryBoyId,
+            deliveryBoyName: deletedCust.deliveryBoyName ??
+                getAssignedDeliveryBoyNameForCustomer(deletedCust),
+            newspaperName: pubName,
+            publicationId: sub.publicationId,
+            quantity: sub.quantity,
+            note: 'Customer Deleted (Approved by Owner)',
+            skipSync: true,
+          );
+        }
+        _cloudService.deleteCustomerFromCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          customerId: current.targetId,
+        ).catchError((_) => false);
+      }
+    }
+
     await _storage.saveApprovalRequests(_approvalRequests);
     notifyListeners();
     _triggerAutoSync();
@@ -1360,17 +1422,7 @@ class DeliveryProvider extends ChangeNotifier {
         break;
 
       case ApprovalActionType.deleteCustomer:
-        // Restore deleted customer from payload
-        if (req.payload.isNotEmpty) {
-          try {
-            final restoredCustomer = Customer.fromJson(req.payload);
-            if (!_customers.any((c) => c.id == restoredCustomer.id)) {
-              _customers.add(restoredCustomer);
-              _customers.sort((a, b) => a.sequenceNo.compareTo(b.sequenceNo));
-              await _storage.saveCustomers(_customers);
-            }
-          } catch (_) {}
-        }
+        // Customer was not removed yet; rejecting simply dismisses the deletion request!
         break;
 
       case ApprovalActionType.addCustomer:
@@ -1399,6 +1451,16 @@ class DeliveryProvider extends ChangeNotifier {
         break;
 
       case ApprovalActionType.editCustomer:
+        if (req.payload.isNotEmpty) {
+          try {
+            final prev = Customer.fromJson(req.payload);
+            final cIdx = _customers.indexWhere((c) => c.id == prev.id);
+            if (cIdx >= 0) {
+              _customers[cIdx] = prev;
+              await _storage.saveCustomers(_customers);
+            }
+          } catch (_) {}
+        }
         break;
     }
 
@@ -1414,16 +1476,50 @@ class DeliveryProvider extends ChangeNotifier {
 
     for (int i = 0; i < _approvalRequests.length; i++) {
       if (_approvalRequests[i].isPending) {
-        _approvalRequests[i] = _approvalRequests[i].copyWith(
+        final req = _approvalRequests[i];
+        _approvalRequests[i] = req.copyWith(
           status: ApprovalStatus.approved,
           reviewedBy: reviewer,
           reviewedAt: now,
         );
         hasChanges = true;
+
+        if (req.actionType == ApprovalActionType.deleteCustomer) {
+          final targetIdx = _customers.indexWhere((c) => c.id == req.targetId);
+          if (targetIdx >= 0) {
+            final deletedCust = _customers.removeAt(targetIdx);
+            for (final sub in deletedCust.subscriptions) {
+              final pub = getPublicationById(sub.publicationId);
+              final pubName = pub?.nameEn ?? sub.publicationId;
+              await recordNewspaperEvent(
+                eventType: NewspaperEventType.deleted,
+                customerId: deletedCust.id,
+                customerName: deletedCust.name,
+                houseNumber: deletedCust.houseNumber,
+                block: deletedCust.block,
+                area: deletedCust.area,
+                deliveryBoyId: deletedCust.deliveryBoyId,
+                deliveryBoyName: deletedCust.deliveryBoyName ??
+                    getAssignedDeliveryBoyNameForCustomer(deletedCust),
+                newspaperName: pubName,
+                publicationId: sub.publicationId,
+                quantity: sub.quantity,
+                note: 'Customer Deleted (Approved by Owner)',
+                skipSync: true,
+              );
+            }
+            _cloudService.deleteCustomerFromCloud(
+              url: _supabaseUrl,
+              anonKey: _supabaseAnonKey,
+              customerId: req.targetId,
+            ).catchError((_) => false);
+          }
+        }
       }
     }
 
     if (hasChanges) {
+      await _storage.saveCustomers(_customers);
       await _storage.saveApprovalRequests(_approvalRequests);
       notifyListeners();
       _triggerAutoSync();

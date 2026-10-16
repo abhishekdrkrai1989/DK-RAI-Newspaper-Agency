@@ -28,12 +28,19 @@ void main() {
     expect(find.text('Owner (Admin)'), findsOneWidget);
     expect(find.text('Delivery Boy'), findsOneWidget);
 
+    // Owner is selected by default, Instant Login (No PIN) is visible for Owner
+    expect(find.text('Instant Login (No PIN)'), findsOneWidget);
+
     // Tap Delivery Boy card
     await tester.tap(find.text('Delivery Boy'));
     await tester.pumpAndSettle();
 
-    // Tap "Instant Login (No PIN)" button
-    await tester.tap(find.text('Instant Login (No PIN)'));
+    // Verify "Instant Login (No PIN)" button is NOT present for Delivery Boy (Owner-only feature)
+    expect(find.text('Instant Login (No PIN)'), findsNothing);
+
+    // Enter Delivery Boy PIN (0000) and tap Login
+    await tester.enterText(find.byType(TextField), '0000');
+    await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
 
     // Now logged in as Delivery Boy
