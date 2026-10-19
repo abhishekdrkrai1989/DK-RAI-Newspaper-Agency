@@ -146,5 +146,37 @@ void main() {
       // No approval request needed since Owner made the change
       expect(provider.pendingApprovalsCount, 0);
     });
+
+    test('ApprovalRequest toRow and fromRow accurately preserve data for Supabase cloud sync', () {
+      final req = ApprovalRequest(
+        id: 'req_12345',
+        actionType: ApprovalActionType.addCustomer,
+        title: 'New Customer: Sharma Ji',
+        description: 'House 102, Block A',
+        targetId: 'cust_999',
+        requestedBy: 'Ramesh (Delivery Boy)',
+        requestedAt: DateTime.parse('2026-10-19 10:30:00'),
+        status: ApprovalStatus.pending,
+        payload: {'name': 'Sharma Ji', 'block': 'A'},
+      );
+
+      final row = req.toRow();
+      expect(row['id'], 'req_12345');
+      expect(row['action_type'], 'addCustomer');
+      expect(row['target_id'], 'cust_999');
+      expect(row['requested_by'], 'Ramesh (Delivery Boy)');
+      expect(row['status'], 'pending');
+      expect(row['payload']['name'], 'Sharma Ji');
+
+      final reconstructed = ApprovalRequest.fromRow(row);
+      expect(reconstructed.id, req.id);
+      expect(reconstructed.actionType, req.actionType);
+      expect(reconstructed.title, req.title);
+      expect(reconstructed.description, req.description);
+      expect(reconstructed.targetId, req.targetId);
+      expect(reconstructed.requestedBy, req.requestedBy);
+      expect(reconstructed.status, req.status);
+      expect(reconstructed.payload['name'], 'Sharma Ji');
+    });
   });
 }

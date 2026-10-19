@@ -537,6 +537,37 @@ class _ApprovalsScreenState extends State<ApprovalsScreen>
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: widget.provider.strings.isHindi
+                    ? 'क्लाउड से रिफ्रेश करें'
+                    : 'Refresh from Cloud',
+                icon: widget.provider.isSyncing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.refresh),
+                onPressed: widget.provider.isSyncing
+                    ? null
+                    : () async {
+                        final res = await widget.provider
+                            .syncWithCloud(forceDownload: true);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(res.message),
+                            backgroundColor: res.success
+                                ? const Color(0xFF059669)
+                                : const Color(0xFFDC2626),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+              ),
               if (pending.isNotEmpty)
                 IconButton(
                   tooltip: s.btnApproveAll,
@@ -549,64 +580,100 @@ class _ApprovalsScreenState extends State<ApprovalsScreen>
             controller: _tabController,
             children: [
               // Tab 1: Pending
-              pending.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+              RefreshIndicator(
+                onRefresh: () async {
+                  await widget.provider.syncWithCloud(forceDownload: true);
+                },
+                child: pending.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          Icon(
-                            Icons.check_circle_outline,
-                            size: 64,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            s.noPendingApprovals,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
+                          const SizedBox(height: 120),
+                          Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_outline,
+                                  size: 64,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  s.noPendingApprovals,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        itemCount: pending.length,
+                        itemBuilder: (ctx, i) => _buildRequestCard(pending[i]),
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      itemCount: pending.length,
-                      itemBuilder: (ctx, i) => _buildRequestCard(pending[i]),
-                    ),
+              ),
 
               // Tab 2: Approved
-              approved.isEmpty
-                  ? Center(
-                      child: Text(
-                        s.isHindi
-                            ? 'कोई मंज़ूर किया गया कार्य नहीं है'
-                            : 'No approved action history',
-                        style: TextStyle(color: Colors.grey.shade600),
+              RefreshIndicator(
+                onRefresh: () async {
+                  await widget.provider.syncWithCloud(forceDownload: true);
+                },
+                child: approved.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          const SizedBox(height: 140),
+                          Center(
+                            child: Text(
+                              s.isHindi
+                                  ? 'कोई मंज़ूर किया गया कार्य नहीं है'
+                                  : 'No approved action history',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        itemCount: approved.length,
+                        itemBuilder: (ctx, i) => _buildRequestCard(approved[i]),
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      itemCount: approved.length,
-                      itemBuilder: (ctx, i) => _buildRequestCard(approved[i]),
-                    ),
+              ),
 
               // Tab 3: Rejected
-              rejected.isEmpty
-                  ? Center(
-                      child: Text(
-                        s.isHindi
-                            ? 'कोई अस्वीकृत कार्य नहीं है'
-                            : 'No rejected action history',
-                        style: TextStyle(color: Colors.grey.shade600),
+              RefreshIndicator(
+                onRefresh: () async {
+                  await widget.provider.syncWithCloud(forceDownload: true);
+                },
+                child: rejected.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        children: [
+                          const SizedBox(height: 140),
+                          Center(
+                            child: Text(
+                              s.isHindi
+                                  ? 'कोई अस्वीकृत कार्य नहीं है'
+                                  : 'No rejected action history',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        itemCount: rejected.length,
+                        itemBuilder: (ctx, i) => _buildRequestCard(rejected[i]),
                       ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      itemCount: rejected.length,
-                      itemBuilder: (ctx, i) => _buildRequestCard(rejected[i]),
-                    ),
+              ),
             ],
           ),
         );

@@ -889,6 +889,7 @@ class DeliveryProvider extends ChangeNotifier {
         publications: _publications,
         users: _users,
         events: _newspaperEvents,
+        approvalRequests: _approvalRequests,
       );
     } else if (forceDownload) {
       final download = await _cloudService.downloadAll(
@@ -909,6 +910,10 @@ class DeliveryProvider extends ChangeNotifier {
           _newspaperEvents = download.events!;
           await _storage.saveNewspaperEvents(_newspaperEvents);
         }
+        if (download.approvalRequests != null) {
+          _approvalRequests = download.approvalRequests!;
+          await _storage.saveApprovalRequests(_approvalRequests);
+        }
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
       }
@@ -920,6 +925,7 @@ class DeliveryProvider extends ChangeNotifier {
         localPublications: _publications,
         localUsers: _users,
         localEvents: _newspaperEvents,
+        localApprovalRequests: _approvalRequests,
       );
       result = syncRes.result;
       if (syncRes.result.success) {
@@ -927,10 +933,12 @@ class DeliveryProvider extends ChangeNotifier {
         _publications = syncRes.publications;
         _users = syncRes.deliveryBoys;
         _newspaperEvents = syncRes.events;
+        _approvalRequests = syncRes.approvalRequests;
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
         await _storage.saveUsers(_users);
         await _storage.saveNewspaperEvents(_newspaperEvents);
+        await _storage.saveApprovalRequests(_approvalRequests);
       }
     }
 
@@ -1311,6 +1319,12 @@ class DeliveryProvider extends ChangeNotifier {
     _approvalRequests = [request, ..._approvalRequests];
     await _storage.saveApprovalRequests(_approvalRequests);
     notifyListeners();
+    _triggerAutoSync();
+    _cloudService.syncApprovalRequestToCloud(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
+      request: request,
+    ).catchError((_) => false);
   }
 
   Future<void> approveRequest(String requestId) async {
@@ -1362,6 +1376,11 @@ class DeliveryProvider extends ChangeNotifier {
     await _storage.saveApprovalRequests(_approvalRequests);
     notifyListeners();
     _triggerAutoSync();
+    _cloudService.syncApprovalRequestToCloud(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
+      request: updated,
+    ).catchError((_) => false);
   }
 
   Future<void> rejectRequest(String requestId, {String? reason}) async {
@@ -1429,6 +1448,11 @@ class DeliveryProvider extends ChangeNotifier {
         // Revert adding customer -> remove the added customer
         _customers.removeWhere((c) => c.id == req.targetId);
         await _storage.saveCustomers(_customers);
+        _cloudService.deleteCustomerFromCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          customerId: req.targetId,
+        ).catchError((_) => false);
         break;
 
       case ApprovalActionType.deletePublication:
@@ -1467,6 +1491,11 @@ class DeliveryProvider extends ChangeNotifier {
     await _storage.saveApprovalRequests(_approvalRequests);
     notifyListeners();
     _triggerAutoSync();
+    _cloudService.syncApprovalRequestToCloud(
+      url: _supabaseUrl,
+      anonKey: _supabaseAnonKey,
+      request: updated,
+    ).catchError((_) => false);
   }
 
   Future<void> approveAllPending() async {
@@ -1527,9 +1556,17 @@ class DeliveryProvider extends ChangeNotifier {
   }
 
   Future<void> clearApprovalHistory() async {
+    final toDelete = _approvalRequests.where((r) => !r.isPending).toList();
     _approvalRequests.removeWhere((r) => !r.isPending);
     await _storage.saveApprovalRequests(_approvalRequests);
     notifyListeners();
+    for (final r in toDelete) {
+      _cloudService.deleteApprovalRequestFromCloud(
+        url: _supabaseUrl,
+        anonKey: _supabaseAnonKey,
+        requestId: r.id,
+      ).catchError((_) => false);
+    }
   }
 
   // ==========================================

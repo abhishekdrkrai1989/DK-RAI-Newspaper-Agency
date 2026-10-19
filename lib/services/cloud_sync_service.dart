@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/app_user.dart';
+import '../models/approval_request.dart';
 import '../models/customer.dart';
 import '../models/newspaper_event.dart';
 import '../models/publication.dart';
@@ -12,6 +13,7 @@ class CloudSyncResult {
   final int publicationsSynced;
   final int deliveryBoysSynced;
   final int eventsSynced;
+  final int approvalsSynced;
   final DateTime timestamp;
 
   const CloudSyncResult({
@@ -21,6 +23,7 @@ class CloudSyncResult {
     this.publicationsSynced = 0,
     this.deliveryBoysSynced = 0,
     this.eventsSynced = 0,
+    this.approvalsSynced = 0,
     required this.timestamp,
   });
 }
@@ -126,7 +129,7 @@ class CloudSyncService {
     }
   }
 
-  /// Uploads (upserts) all local publications, customers, and delivery boys to Supabase Cloud DB
+  /// Uploads (upserts) all local publications, customers, delivery boys, events, and approval requests to Supabase Cloud DB
   Future<CloudSyncResult> uploadAll({
     required String url,
     required String anonKey,
@@ -134,6 +137,7 @@ class CloudSyncService {
     required List<Publication> publications,
     List<AppUser> users = const [],
     List<NewspaperEvent> events = const [],
+    List<ApprovalRequest> approvalRequests = const [],
   }) async {
     final cleanUrl = sanitizeUrl(url);
     if (cleanUrl.isEmpty || anonKey.trim().isEmpty) {
@@ -279,6 +283,27 @@ class CloudSyncService {
         } catch (_) {}
       }
 
+      // 5. Upsert Approval Requests (Changes submitted by delivery boys for Admin approval)
+      int approvalsSynced = 0;
+      if (approvalRequests.isNotEmpty) {
+        try {
+          final approvalsUri =
+              Uri.parse('$cleanUrl/rest/v1/approval_requests');
+          final approvalRows = approvalRequests.map((r) => r.toRow()).toList();
+          final approvalRes = await _client
+              .post(
+                approvalsUri,
+                headers: _headers(anonKey, upsert: true),
+                body: jsonEncode(approvalRows),
+              )
+              .timeout(const Duration(seconds: 25));
+
+          if (approvalRes.statusCode >= 200 && approvalRes.statusCode < 300) {
+            approvalsSynced = approvalRequests.length;
+          }
+        } catch (_) {}
+      }
+
       return CloudSyncResult(
         success: true,
         message: 'Successfully backed up all data to Supabase Cloud DB!',
@@ -286,6 +311,7 @@ class CloudSyncService {
         publicationsSynced: publications.length,
         deliveryBoysSynced: boysSynced,
         eventsSynced: eventsSynced,
+        approvalsSynced: approvalsSynced,
         timestamp: DateTime.now(),
       );
     } catch (e) {
@@ -297,12 +323,13 @@ class CloudSyncService {
     }
   }
 
-  /// Downloads all publications, customers, delivery boys, and events from Supabase Cloud DB
+  /// Downloads all publications, customers, delivery boys, events, and approval requests from Supabase Cloud DB
   Future<({
     List<Customer>? customers,
     List<Publication>? publications,
     List<AppUser>? deliveryBoys,
     List<NewspaperEvent>? events,
+    List<ApprovalRequest>? approvalRequests,
     CloudSyncResult result,
   })> downloadAll({
     required String url,
@@ -315,6 +342,7 @@ class CloudSyncService {
         publications: null,
         deliveryBoys: null,
         events: null,
+        approvalRequests: null,
         result: CloudSyncResult(
           success: false,
           message: 'Cloud database is not configured.',
@@ -336,6 +364,7 @@ class CloudSyncService {
           publications: null,
           deliveryBoys: null,
           events: null,
+          approvalRequests: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -364,6 +393,7 @@ class CloudSyncService {
           publications: null,
           deliveryBoys: null,
           events: null,
+          approvalRequests: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -409,21 +439,43 @@ class CloudSyncService {
         }
       } catch (_) {}
 
+      // 5. Fetch Approval Requests (Changes submitted by delivery boys for Admin approval)
+      List<ApprovalRequest>? remoteApprovals;
+      try {
+        final approvalsUri = Uri.parse(
+          '$cleanUrl/rest/v1/approval_requests?select=*&order=requested_at.desc',
+        );
+        final approvalsRes = await _client
+            .get(approvalsUri, headers: _headers(anonKey))
+            .timeout(const Duration(seconds: 15));
+        if (approvalsRes.statusCode >= 200 && approvalsRes.statusCode < 300) {
+          final approvalsListRaw =
+              jsonDecode(approvalsRes.body) as List<dynamic>;
+          remoteApprovals = approvalsListRaw
+              .map((row) =>
+                  ApprovalRequest.fromRow(row as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+
       final boysCount = remoteBoys?.length ?? 0;
       final eventsCount = remoteEvents?.length ?? 0;
+      final approvalsCount = remoteApprovals?.length ?? 0;
       return (
         customers: remoteCustomers,
         publications: remotePublications,
         deliveryBoys: remoteBoys,
         events: remoteEvents,
+        approvalRequests: remoteApprovals,
         result: CloudSyncResult(
           success: true,
           message:
-              'Downloaded ${remoteCustomers.length} homes, ${remotePublications.length} publications, $boysCount hawkers & $eventsCount events from Supabase.',
+              'Downloaded ${remoteCustomers.length} homes, ${remotePublications.length} publications, $boysCount hawkers, $eventsCount events & $approvalsCount approvals from Supabase.',
           customersSynced: remoteCustomers.length,
           publicationsSynced: remotePublications.length,
           deliveryBoysSynced: boysCount,
           eventsSynced: eventsCount,
+          approvalsSynced: approvalsCount,
           timestamp: DateTime.now(),
         ),
       );
@@ -433,6 +485,7 @@ class CloudSyncService {
         publications: null,
         deliveryBoys: null,
         events: null,
+        approvalRequests: null,
         result: CloudSyncResult(
           success: false,
           message: 'Error downloading from cloud: $e',
@@ -448,6 +501,7 @@ class CloudSyncService {
     List<Publication> publications,
     List<AppUser> deliveryBoys,
     List<NewspaperEvent> events,
+    List<ApprovalRequest> approvalRequests,
     CloudSyncResult result,
   })> syncTwoWay({
     required String url,
@@ -456,6 +510,7 @@ class CloudSyncService {
     required List<Publication> localPublications,
     List<AppUser> localUsers = const [],
     List<NewspaperEvent> localEvents = const [],
+    List<ApprovalRequest> localApprovalRequests = const [],
   }) async {
     final downloadResult =
         await downloadAll(url: url, anonKey: anonKey);
@@ -468,6 +523,7 @@ class CloudSyncService {
         publications: localPublications,
         deliveryBoys: localUsers,
         events: localEvents,
+        approvalRequests: localApprovalRequests,
         result: downloadResult.result,
       );
     }
@@ -518,6 +574,33 @@ class CloudSyncService {
     final mergedEvents = mergedEventsMap.values.toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
+    // Merge Approval Requests
+    final mergedApprovalsMap = <String, ApprovalRequest>{};
+    if (downloadResult.approvalRequests != null) {
+      for (final r in downloadResult.approvalRequests!) {
+        mergedApprovalsMap[r.id] = r;
+      }
+    }
+    for (final local in localApprovalRequests) {
+      final remote = mergedApprovalsMap[local.id];
+      if (remote == null) {
+        mergedApprovalsMap[local.id] = local;
+      } else {
+        if (!local.isPending && remote.isPending) {
+          mergedApprovalsMap[local.id] = local;
+        } else if (local.isPending && !remote.isPending) {
+          mergedApprovalsMap[local.id] = remote;
+        } else if (local.reviewedAt != null && remote.reviewedAt != null) {
+          mergedApprovalsMap[local.id] =
+              local.reviewedAt!.isAfter(remote.reviewedAt!) ? local : remote;
+        } else {
+          mergedApprovalsMap[local.id] = local;
+        }
+      }
+    }
+    final mergedApprovals = mergedApprovalsMap.values.toList()
+      ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+
     // Upload merged state back to cloud so both sides are in sync
     final uploadResult = await uploadAll(
       url: url,
@@ -526,6 +609,7 @@ class CloudSyncService {
       publications: mergedPublications,
       users: mergedBoys,
       events: mergedEvents,
+      approvalRequests: mergedApprovals,
     );
 
     if (!uploadResult.success) {
@@ -534,6 +618,7 @@ class CloudSyncService {
         publications: mergedPublications,
         deliveryBoys: mergedBoys,
         events: mergedEvents,
+        approvalRequests: mergedApprovals,
         result: uploadResult,
       );
     }
@@ -543,14 +628,16 @@ class CloudSyncService {
       publications: mergedPublications,
       deliveryBoys: mergedBoys,
       events: mergedEvents,
+      approvalRequests: mergedApprovals,
       result: CloudSyncResult(
         success: true,
         message:
-            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications, ${mergedBoys.length} hawkers & ${mergedEvents.length} events synchronized with Supabase.',
+            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications, ${mergedBoys.length} hawkers, ${mergedEvents.length} events & ${mergedApprovals.length} approvals synchronized with Supabase.',
         customersSynced: mergedCustomers.length,
         publicationsSynced: mergedPublications.length,
         deliveryBoysSynced: mergedBoys.length,
         eventsSynced: mergedEvents.length,
+        approvalsSynced: mergedApprovals.length,
         timestamp: DateTime.now(),
       ),
     );
@@ -830,6 +917,47 @@ class CloudSyncService {
     }
   }
 
+  Future<bool> syncApprovalRequestToCloud({
+    required String url,
+    required String anonKey,
+    required ApprovalRequest request,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse('$cleanUrl/rest/v1/approval_requests');
+      final res = await _client
+          .post(
+            uri,
+            headers: _headers(anonKey, upsert: true),
+            body: jsonEncode([request.toRow()]),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteApprovalRequestFromCloud({
+    required String url,
+    required String anonKey,
+    required String requestId,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri =
+          Uri.parse('$cleanUrl/rest/v1/approval_requests?id=eq.$requestId');
+      final res = await _client
+          .delete(uri, headers: _headers(anonKey))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Copyable PostgreSQL SQL script for Supabase SQL Editor
   static String get sqlSetupScript => '''
 -- ==============================================================
@@ -914,13 +1042,31 @@ create table if not exists newspaper_events (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 5. Enable Row Level Security (RLS)
+-- 5. Create Approval Requests Table (Delivery Boy Actions Pending Admin/Owner Approval)
+create table if not exists approval_requests (
+  id text primary key,
+  action_type text not null,
+  target_id text not null,
+  title text default '',
+  description text default '',
+  requested_by text not null default '',
+  requested_at text not null,
+  status text not null default 'pending',
+  reviewed_by text default '',
+  reviewed_at text,
+  review_note text default '',
+  payload jsonb default '{}'::jsonb,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 6. Enable Row Level Security (RLS)
 alter table publications enable row level security;
 alter table customers enable row level security;
 alter table delivery_boys enable row level security;
 alter table newspaper_events enable row level security;
+alter table approval_requests enable row level security;
 
--- 6. Enable Public Anon API Access (Read & Write with Anon Key)
+-- 7. Enable Public Anon API Access (Read & Write with Anon Key)
 drop policy if exists "Allow all on publications for anon" on publications;
 create policy "Allow all on publications for anon"
   on publications for all
@@ -945,7 +1091,13 @@ create policy "Allow all on newspaper_events for anon"
   using (true)
   with check (true);
 
--- 7. Notify PostgREST to reload schema cache immediately
+drop policy if exists "Allow all on approval_requests for anon" on approval_requests;
+create policy "Allow all on approval_requests for anon"
+  on approval_requests for all
+  using (true)
+  with check (true);
+
+-- 8. Notify PostgREST to reload schema cache immediately
 notify pgrst, 'reload schema';
 ''';
 
@@ -995,6 +1147,25 @@ create table if not exists newspaper_events (
 alter table newspaper_events enable row level security;
 drop policy if exists "Allow all on newspaper_events for anon" on newspaper_events;
 create policy "Allow all on newspaper_events for anon" on newspaper_events for all using (true) with check (true);
+
+create table if not exists approval_requests (
+  id text primary key,
+  action_type text not null,
+  target_id text not null,
+  title text default '',
+  description text default '',
+  requested_by text not null default '',
+  requested_at text not null,
+  status text not null default 'pending',
+  reviewed_by text default '',
+  reviewed_at text,
+  review_note text default '',
+  payload jsonb default '{}'::jsonb,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+alter table approval_requests enable row level security;
+drop policy if exists "Allow all on approval_requests for anon" on approval_requests;
+create policy "Allow all on approval_requests for anon" on approval_requests for all using (true) with check (true);
 
 notify pgrst, 'reload schema';
 ''';

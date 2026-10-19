@@ -24,10 +24,14 @@ void main() {
       expect(sql.contains('create table if not exists publications'), isTrue);
       expect(sql.contains('create table if not exists customers'), isTrue);
       expect(sql.contains('create table if not exists delivery_boys'), isTrue);
+      expect(sql.contains('create table if not exists newspaper_events'), isTrue);
+      expect(sql.contains('create table if not exists approval_requests'), isTrue);
       expect(sql.contains('enable row level security'), isTrue);
       expect(sql.contains('Allow all on publications for anon'), isTrue);
       expect(sql.contains('Allow all on customers for anon'), isTrue);
       expect(sql.contains('Allow all on delivery_boys for anon'), isTrue);
+      expect(sql.contains('Allow all on newspaper_events for anon'), isTrue);
+      expect(sql.contains('Allow all on approval_requests for anon'), isTrue);
     });
 
     test('testConnection fails gracefully on empty credentials', () async {
@@ -37,7 +41,7 @@ void main() {
       expect(res.message.contains('Please provide both'), isTrue);
     });
 
-    test('deleteCustomerFromCloud and deletePublicationFromCloud fail gracefully on empty credentials', () async {
+    test('delete and sync methods fail gracefully on empty credentials', () async {
       final service = CloudSyncService();
       final resCust = await service.deleteCustomerFromCloud(url: '', anonKey: '', customerId: 'cust_1');
       expect(resCust, isFalse);
@@ -45,6 +49,8 @@ void main() {
       expect(resPub, isFalse);
       final resBoy = await service.deleteDeliveryBoyFromCloud(url: '', anonKey: '', boyId: 'boy_1');
       expect(resBoy, isFalse);
+      final resAppr = await service.deleteApprovalRequestFromCloud(url: '', anonKey: '', requestId: 'req_1');
+      expect(resAppr, isFalse);
     });
   });
 

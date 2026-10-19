@@ -105,27 +105,84 @@ class ApprovalRequest {
         'payload': payload,
       };
 
-  factory ApprovalRequest.fromJson(Map<String, dynamic> json) {
+  Map<String, dynamic> toRow() => {
+        'id': id,
+        'action_type': actionType.name,
+        'title': title,
+        'description': description,
+        'target_id': targetId,
+        'requested_by': requestedBy,
+        'requested_at': requestedAt.toUtc().toIso8601String(),
+        'status': status.name,
+        'reviewed_by': reviewedBy,
+        'reviewed_at': reviewedAt?.toUtc().toIso8601String(),
+        'review_note': reviewNote,
+        'payload': payload,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+
+  factory ApprovalRequest.fromRow(Map<String, dynamic> row) {
+    final id = (row['id'] as String?) ?? '';
+    final actionTypeStr = (row['action_type'] as String?) ??
+        (row['actionType'] as String?) ??
+        'pausePaper';
+    final actionType = ApprovalActionType.values.firstWhere(
+      (e) => e.name == actionTypeStr,
+      orElse: () => ApprovalActionType.pausePaper,
+    );
+    final title = (row['title'] as String?) ?? 'Action Request';
+    final description = (row['description'] as String?) ?? '';
+    final targetId = (row['target_id'] as String?) ??
+        (row['targetId'] as String?) ??
+        '';
+    final requestedBy = (row['requested_by'] as String?) ??
+        (row['requestedBy'] as String?) ??
+        'Delivery Boy';
+    final requestedAt = DateTime.tryParse(
+          (row['requested_at'] as String?) ??
+              (row['requestedAt'] as String?) ??
+              '',
+        ) ??
+        DateTime.now();
+    final statusStr = (row['status'] as String?) ?? 'pending';
+    final status = ApprovalStatus.values.firstWhere(
+      (e) => e.name == statusStr,
+      orElse: () => ApprovalStatus.pending,
+    );
+    final reviewedBy = (row['reviewed_by'] as String?) ??
+        (row['reviewedBy'] as String?);
+    final reviewedAt = DateTime.tryParse(
+      (row['reviewed_at'] as String?) ??
+          (row['reviewedAt'] as String?) ??
+          '',
+    );
+    final reviewNote = (row['review_note'] as String?) ??
+        (row['reviewNote'] as String?);
+
+    final rawPayload = row['payload'];
+    Map<String, dynamic> payload = const {};
+    if (rawPayload is Map<String, dynamic>) {
+      payload = rawPayload;
+    } else if (rawPayload is Map) {
+      payload = Map<String, dynamic>.from(rawPayload);
+    }
+
     return ApprovalRequest(
-      id: json['id'] as String? ?? 'req_${DateTime.now().millisecondsSinceEpoch}',
-      actionType: ApprovalActionType.values.firstWhere(
-        (e) => e.name == json['actionType'],
-        orElse: () => ApprovalActionType.pausePaper,
-      ),
-      title: json['title'] as String? ?? 'Action Request',
-      description: json['description'] as String? ?? '',
-      targetId: json['targetId'] as String? ?? '',
-      requestedBy: json['requestedBy'] as String? ?? 'Delivery Boy',
-      requestedAt: DateTime.tryParse(json['requestedAt'] as String? ?? '') ??
-          DateTime.now(),
-      status: ApprovalStatus.values.firstWhere(
-        (e) => e.name == json['status'],
-        orElse: () => ApprovalStatus.pending,
-      ),
-      reviewedBy: json['reviewedBy'] as String?,
-      reviewedAt: DateTime.tryParse(json['reviewedAt'] as String? ?? ''),
-      reviewNote: json['reviewNote'] as String?,
-      payload: (json['payload'] as Map<String, dynamic>?) ?? {},
+      id: id,
+      actionType: actionType,
+      title: title,
+      description: description,
+      targetId: targetId,
+      requestedBy: requestedBy,
+      requestedAt: requestedAt,
+      status: status,
+      reviewedBy: reviewedBy,
+      reviewedAt: reviewedAt,
+      reviewNote: reviewNote,
+      payload: payload,
     );
   }
+
+  factory ApprovalRequest.fromJson(Map<String, dynamic> json) =>
+      ApprovalRequest.fromRow(json);
 }
