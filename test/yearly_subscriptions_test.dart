@@ -254,6 +254,74 @@ void main() {
       expect(find.text('Hindustan Times'), findsOneWidget);
       expect(find.text('Times Of India'), findsOneWidget);
       expect(find.text('Amar Ujala'), findsOneWidget);
+
+      // Verify top Add Scheme button is rendered
+      expect(find.text('+ Add New Annual Subscription Scheme'), findsOneWidget);
+
+      // Verify Edit and Delete buttons are rendered on scheme cards
+      expect(find.text('Edit'), findsWidgets);
+      expect(find.text('Delete'), findsWidgets);
+    });
+
+    testWidgets('Add, Edit, and Delete scheme via UI buttons', (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: YearlySubscriptionsScreen(
+            provider: provider,
+            initialTabIndex: 1, // Directly open Schemes tab
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify top Add New Scheme button
+      final addSchemeBtn = find.text('+ Add New Annual Subscription Scheme');
+      expect(addSchemeBtn, findsOneWidget);
+
+      // Tap + Add New Annual Subscription Scheme button
+      await tester.tap(addSchemeBtn);
+      await tester.pumpAndSettle();
+
+      // Check dialog is open
+      expect(find.text('Add New Yearly Scheme'), findsOneWidget);
+      expect(find.byType(TextField), findsNWidgets(3)); // Name, Price, Description
+
+      // Enter scheme details
+      await tester.enterText(find.byType(TextField).at(0), 'Business Standard');
+      await tester.enterText(find.byType(TextField).at(1), '2500');
+      await tester.enterText(find.byType(TextField).at(2), 'Financial daily newspaper');
+
+      // Tap 'Confirm' button inside dialog
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Confirm'));
+      await tester.pumpAndSettle();
+
+      // Verify provider has new scheme
+      expect(provider.yearlySchemes.any((s) => s.name == 'Business Standard'), isTrue);
+      expect(find.text('Business Standard'), findsOneWidget);
+
+      // Tap Edit on Business Standard
+      final editBtn = find.widgetWithText(ElevatedButton, 'Edit').first;
+      await tester.tap(editBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Edit Booking Scheme'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).at(1), '2600');
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Confirm'));
+      await tester.pumpAndSettle();
+
+      // Tap Delete on first scheme
+      final deleteBtn = find.widgetWithText(ElevatedButton, 'Delete').first;
+      await tester.tap(deleteBtn);
+      await tester.pumpAndSettle();
+
+      // Confirm delete dialog
+      expect(find.text('Delete Scheme?'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Delete Scheme'));
+      await tester.pumpAndSettle();
     });
   });
 }

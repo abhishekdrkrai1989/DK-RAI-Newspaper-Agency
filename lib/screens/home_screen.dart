@@ -267,6 +267,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           builder: (_) => YearlySubscriptionsScreen(provider: p),
                         ));
                         break;
+                      case 'yearly_schemes':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => YearlySubscriptionsScreen(
+                            provider: p,
+                            initialTabIndex: 1,
+                          ),
+                        ));
+                        break;
                       case 'switch_user':
                         _showUserSwitchDialog(context, p);
                         break;
@@ -376,6 +384,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           Expanded(
                             child: Text(
                               s.tr('Yearly Subscriptions & Schemes', 'वार्षिक सदस्यता व योजनाएं'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'yearly_schemes',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.tune, color: Color(0xFF0D9488), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              s.tr('Annual Schemes (Add/Edit/Delete)', 'वार्षिक योजनाएं (जोड़ें/बदलें/हटाएं)'),
                             ),
                           ),
                         ],

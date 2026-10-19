@@ -6,10 +6,12 @@ import '../providers/delivery_provider.dart';
 
 class YearlySubscriptionsScreen extends StatefulWidget {
   final DeliveryProvider provider;
+  final int initialTabIndex;
 
   const YearlySubscriptionsScreen({
     super.key,
     required this.provider,
+    this.initialTabIndex = 0,
   });
 
   @override
@@ -26,7 +28,14 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTabIndex.clamp(0, 1),
+    );
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -255,65 +264,108 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
                   ),
                   const SizedBox(height: 12),
 
-                  // Newspaper Booking Scheme
-                  Text(
-                    strings.tr(
-                      'Yearly Newspaper Scheme *',
-                      'à¤µà¤¾à¤°à¥à¤·à¤¿à¤• à¤…à¤–à¤¬à¤¾à¤° à¤¯à¥‹à¤œà¤¨à¤¾ *',
-                    ),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF64748B),
-                    ),
+                  // Newspaper Booking Scheme with Add/Edit Scheme Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        strings.tr(
+                          'Yearly Newspaper Scheme *',
+                          'वार्षिक अखबार योजना *',
+                        ),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                        icon: const Icon(Icons.add_circle_outline,
+                            size: 15, color: Color(0xFF0F766E)),
+                        label: Text(
+                          strings.tr(
+                            '+ Add / Edit Schemes',
+                            '+ योजना जोड़ें / बदलें',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F766E),
+                          ),
+                        ),
+                        onPressed: () async {
+                          final newScheme = await _showAddEditSchemeDialog();
+                          if (newScheme != null) {
+                            setModalState(() {
+                              selectedScheme = newScheme.name;
+                            });
+                          }
+                        },
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: availableSchemes.any((s) => s.name == selectedScheme)
-                        ? selectedScheme
-                        : availableSchemes.first.name,
-                    decoration: InputDecoration(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    items: availableSchemes
-                        .map(
-                          (s) => DropdownMenuItem(
-                            value: s.name,
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.newspaper,
-                                  size: 18,
-                                  color: Color(0xFF0D9488),
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    s.name,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
+                  Builder(
+                    builder: (ctx) {
+                      final currentSchemes =
+                          widget.provider.yearlySchemes.isNotEmpty
+                              ? widget.provider.yearlySchemes
+                              : YearlyBookingScheme.defaultSchemes();
+                      final effectiveValue =
+                          currentSchemes.any((s) => s.name == selectedScheme)
+                              ? selectedScheme
+                              : currentSchemes.first.name;
+
+                      return DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        value: effectiveValue,
+                        decoration: InputDecoration(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
                           ),
-                        )
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setModalState(() {
-                          selectedScheme = val;
-                        });
-                      }
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        items: currentSchemes
+                            .map(
+                              (s) => DropdownMenuItem(
+                                value: s.name,
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.newspaper,
+                                      size: 18,
+                                      color: Color(0xFF0D9488),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        s.name,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() {
+                              selectedScheme = val;
+                            });
+                          }
+                        },
+                      );
                     },
                   ),
                   const SizedBox(height: 14),
@@ -706,7 +758,8 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
     );
   }
 
-  void _showAddEditSchemeDialog({YearlyBookingScheme? existing}) {
+  Future<YearlyBookingScheme?> _showAddEditSchemeDialog(
+      {YearlyBookingScheme? existing}) async {
     final isEditing = existing != null;
     final strings = widget.provider.strings;
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
@@ -718,7 +771,7 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
     final descCtrl =
         TextEditingController(text: existing?.description ?? '');
 
-    showDialog(
+    return showDialog<YearlyBookingScheme>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(
@@ -789,7 +842,7 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
 
               await widget.provider.saveYearlyBookingScheme(scheme);
               if (!mounted) return;
-              Navigator.pop(ctx);
+              Navigator.pop(ctx, scheme);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
@@ -807,6 +860,67 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteScheme(YearlyBookingScheme sc) async {
+    final s = widget.provider.strings;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
+            const SizedBox(width: 8),
+            Text(
+              s.tr('Delete Scheme?', 'योजना हटाएं?'),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          s.tr(
+            'Are you sure you want to delete "${sc.name}" from Annual Subscription Schemes?',
+            'क्या आप "${sc.name}" को वार्षिक सदस्यता योजनाओं से हटाना चाहते हैं?',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(s.cancel),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: const Icon(Icons.delete, size: 16),
+            label: Text(s.tr('Delete Scheme', 'योजना हटाएं')),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await widget.provider.deleteYearlyBookingScheme(sc.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            s.tr(
+              '"${sc.name}" deleted successfully.',
+              '"${sc.name}" योजना हटा दी गई।',
+            ),
+          ),
+          backgroundColor: const Color(0xFFDC2626),
+        ),
+      );
+    }
   }
 
   Widget _buildSubscriptionCard(YearlySubscription sub) {
@@ -1335,6 +1449,34 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
               ],
             ),
             actions: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white.withOpacity(0.18),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: const Icon(Icons.add_circle_outline,
+                      size: 16, color: Colors.white),
+                  label: Text(
+                    s.tr('+ Add Scheme', '+ नई योजना'),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  onPressed: () => _showAddEditSchemeDialog(),
+                ),
+              ),
+              const SizedBox(width: 4),
               IconButton(
                 tooltip: s.tr('Refresh from Cloud', 'à¤•à¥à¤²à¤¾à¤‰à¤¡ à¤¸à¥‡ à¤°à¤¿à¤«à¥à¤°à¥‡à¤¶ à¤•à¤°à¥‡à¤‚'),
                 icon: p.isSyncing
@@ -1366,13 +1508,15 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
-            backgroundColor: const Color(0xFF1E3A8A),
+            backgroundColor: _tabController.index == 0
+                ? const Color(0xFF1E3A8A)
+                : const Color(0xFF0F766E),
             foregroundColor: Colors.white,
             icon: const Icon(Icons.add),
             label: Text(
               _tabController.index == 0
-                  ? s.tr('New Booking', 'à¤¨à¤ˆ à¤¬à¥à¤•à¤¿à¤‚à¤—')
-                  : s.tr('New Scheme', 'à¤¨à¤ˆ à¤¯à¥‹à¤œà¤¨à¤¾'),
+                  ? s.tr('New Booking', 'नई बुकिंग')
+                  : s.tr('+ Add Annual Scheme', '+ नई योजना'),
             ),
             onPressed: () {
               if (_tabController.index == 0) {
@@ -1442,6 +1586,70 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
                             ),
                           ),
                         ],
+                      ),
+                    ),
+
+                    // Quick Shortcut Banner to Annual Subscription Schemes
+                    InkWell(
+                      onTap: () => _tabController.animateTo(1),
+                      child: Container(
+                        margin: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFBBF7D0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.tune,
+                                color: Color(0xFF16A34A), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                s.tr(
+                                  '${schemes.length} Annual Schemes (Combos)',
+                                  '${schemes.length} वार्षिक योजनाएं व कॉम्बो',
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF15803D),
+                                ),
+                              ),
+                            ),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 4),
+                              ),
+                              icon: const Icon(Icons.add_circle,
+                                  size: 15, color: Color(0xFF0F766E)),
+                              label: Text(
+                                s.tr('+ Add Scheme', '+ नई योजना'),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F766E),
+                                ),
+                              ),
+                              onPressed: () => _showAddEditSchemeDialog(),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              s.tr('Manage / Edit →', 'प्रबंधित / बदलें →'),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1D4ED8),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
 
@@ -1618,6 +1826,37 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(14),
                   children: [
+                    // Top Prominent Button to Add New Annual Scheme
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F766E),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 14,
+                            horizontal: 16,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          elevation: 2,
+                        ),
+                        icon: const Icon(Icons.add_circle, size: 22),
+                        label: Text(
+                          s.tr(
+                            '+ Add New Annual Subscription Scheme',
+                            '+ नई वार्षिक योजना जोड़ें',
+                          ),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        onPressed: () => _showAddEditSchemeDialog(),
+                      ),
+                    ),
                     // Info banner
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -1692,55 +1931,62 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined,
-                                    size: 19, color: Color(0xFF2563EB)),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEFF6FF),
+                                  foregroundColor: const Color(0xFF1D4ED8),
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: const BorderSide(
+                                      color: Color(0xFFBFDBFE),
+                                    ),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.edit, size: 14),
+                                label: Text(
+                                  s.tr('Edit', 'बदलें'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
                                 onPressed: () =>
                                     _showAddEditSchemeDialog(existing: sc),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline,
-                                    size: 19, color: Color(0xFFDC2626)),
-                                onPressed: () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: Text(
-                                        s.tr(
-                                          'Delete Scheme?',
-                                          'à¤¯à¥‹à¤œà¤¨à¤¾ à¤¹à¤Ÿà¤¾à¤à¤‚?',
-                                        ),
-                                      ),
-                                      content: Text(
-                                        s.tr(
-                                          'Delete "${sc.name}" from schemes?',
-                                          'à¤•à¥à¤¯à¤¾ à¤†à¤ª "${sc.name}" à¤•à¥‹ à¤¯à¥‹à¤œà¤¨à¤¾à¤“à¤‚ à¤¸à¥‡ à¤¹à¤Ÿà¤¾à¤¨à¤¾ à¤šà¤¾à¤¹à¤¤à¥‡ à¤¹à¥ˆà¤‚?',
-                                        ),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () =>
-                                              Navigator.pop(ctx, false),
-                                          child: Text(s.cancel),
-                                        ),
-                                        ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                const Color(0xFFDC2626),
-                                            foregroundColor: Colors.white,
-                                          ),
-                                          onPressed: () =>
-                                              Navigator.pop(ctx, true),
-                                          child: Text(s.tr('Delete', 'हटाएं')),
-                                        ),
-                                      ],
+                              const SizedBox(width: 6),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFFEF2F2),
+                                  foregroundColor: const Color(0xFFDC2626),
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: const BorderSide(
+                                      color: Color(0xFFFECACA),
                                     ),
-                                  );
-                                  if (confirm == true) {
-                                    await widget.provider
-                                        .deleteYearlyBookingScheme(sc.id);
-                                  }
-                                },
+                                  ),
+                                ),
+                                icon: const Icon(Icons.delete_outline,
+                                    size: 14),
+                                label: Text(
+                                  s.tr('Delete', 'हटाएं'),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                onPressed: () => _confirmDeleteScheme(sc),
                               ),
                             ],
                           ),
@@ -1758,3 +2004,5 @@ class _YearlySubscriptionsScreenState extends State<YearlySubscriptionsScreen>
     );
   }
 }
+
+
