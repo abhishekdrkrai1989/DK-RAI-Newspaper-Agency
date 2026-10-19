@@ -5,6 +5,8 @@ import '../models/approval_request.dart';
 import '../models/customer.dart';
 import '../models/newspaper_event.dart';
 import '../models/publication.dart';
+import '../models/yearly_booking_scheme.dart';
+import '../models/yearly_subscription.dart';
 import 'storage_backend.dart';
 
 class LocalStorageService {
@@ -21,6 +23,8 @@ class LocalStorageService {
   static const String _keyApprovalRequests = 'newspaper_app_approval_requests_v1';
   static const String _keyNewspaperEvents = 'newspaper_app_events_v1';
   static const String _keyCustomBlocks = 'newspaper_app_custom_blocks_v1';
+  static const String _keyYearlySchemes = 'newspaper_app_yearly_schemes_v1';
+  static const String _keyYearlySubscriptions = 'newspaper_app_yearly_subscriptions_v1';
 
   final StorageBackend _prefs;
 
@@ -186,6 +190,54 @@ class LocalStorageService {
     final clean = blocks.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList()..sort();
     final encoded = jsonEncode(clean);
     await _prefs.setString(_keyCustomBlocks, encoded);
+  }
+
+  List<YearlyBookingScheme> loadYearlyBookingSchemes() {
+    final raw = _prefs.getString(_keyYearlySchemes);
+    if (raw == null || raw.isEmpty) {
+      return YearlyBookingScheme.defaultSchemes();
+    }
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      final list = decoded
+          .map((item) =>
+              YearlyBookingScheme.fromJson(item as Map<String, dynamic>))
+          .toList();
+      return list.isNotEmpty ? list : YearlyBookingScheme.defaultSchemes();
+    } catch (_) {
+      return YearlyBookingScheme.defaultSchemes();
+    }
+  }
+
+  Future<void> saveYearlyBookingSchemes(
+      List<YearlyBookingScheme> schemes) async {
+    final encoded = jsonEncode(schemes.map((s) => s.toJson()).toList());
+    await _prefs.setString(_keyYearlySchemes, encoded);
+  }
+
+  List<YearlySubscription> loadYearlySubscriptions() {
+    final raw = _prefs.getString(_keyYearlySubscriptions);
+    if (raw == null || raw.isEmpty) {
+      return [];
+    }
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      final list = decoded
+          .map((item) =>
+              YearlySubscription.fromJson(item as Map<String, dynamic>))
+          .toList();
+      list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      return list;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveYearlySubscriptions(
+      List<YearlySubscription> subscriptions) async {
+    final encoded =
+        jsonEncode(subscriptions.map((s) => s.toJson()).toList());
+    await _prefs.setString(_keyYearlySubscriptions, encoded);
   }
 
   List<Publication> loadPublications() {

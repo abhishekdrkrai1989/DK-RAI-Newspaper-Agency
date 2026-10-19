@@ -6,6 +6,8 @@ import '../models/approval_request.dart';
 import '../models/customer.dart';
 import '../models/newspaper_event.dart';
 import '../models/publication.dart';
+import '../models/yearly_booking_scheme.dart';
+import '../models/yearly_subscription.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/local_storage_service.dart';
 
@@ -30,6 +32,8 @@ class DeliveryProvider extends ChangeNotifier {
   late List<AppUser> _users;
   AppUser? _currentUser;
   late List<ApprovalRequest> _approvalRequests;
+  late List<YearlyBookingScheme> _yearlySchemes;
+  late List<YearlySubscription> _yearlySubscriptions;
 
   String _supabaseUrl = '';
   String _supabaseAnonKey = '';
@@ -53,6 +57,8 @@ class DeliveryProvider extends ChangeNotifier {
     _customers = _storage.loadCustomers();
     _newspaperEvents = _storage.loadNewspaperEvents();
     _customBlocks = _storage.loadCustomBlocks();
+    _yearlySchemes = _storage.loadYearlyBookingSchemes();
+    _yearlySubscriptions = _storage.loadYearlySubscriptions();
     _supabaseUrl = _storage.loadSupabaseUrl();
     if (_supabaseUrl.isEmpty) {
       _supabaseUrl = LocalStorageService.defaultSupabaseUrl;
@@ -890,6 +896,8 @@ class DeliveryProvider extends ChangeNotifier {
         users: _users,
         events: _newspaperEvents,
         approvalRequests: _approvalRequests,
+        yearlySchemes: _yearlySchemes,
+        yearlySubscriptions: _yearlySubscriptions,
       );
     } else if (forceDownload) {
       final download = await _cloudService.downloadAll(
@@ -914,6 +922,14 @@ class DeliveryProvider extends ChangeNotifier {
           _approvalRequests = download.approvalRequests!;
           await _storage.saveApprovalRequests(_approvalRequests);
         }
+        if (download.yearlySchemes != null && download.yearlySchemes!.isNotEmpty) {
+          _yearlySchemes = download.yearlySchemes!;
+          await _storage.saveYearlyBookingSchemes(_yearlySchemes);
+        }
+        if (download.yearlySubscriptions != null) {
+          _yearlySubscriptions = download.yearlySubscriptions!;
+          await _storage.saveYearlySubscriptions(_yearlySubscriptions);
+        }
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
       }
@@ -926,6 +942,8 @@ class DeliveryProvider extends ChangeNotifier {
         localUsers: _users,
         localEvents: _newspaperEvents,
         localApprovalRequests: _approvalRequests,
+        localYearlySchemes: _yearlySchemes,
+        localYearlySubscriptions: _yearlySubscriptions,
       );
       result = syncRes.result;
       if (syncRes.result.success) {
@@ -934,11 +952,15 @@ class DeliveryProvider extends ChangeNotifier {
         _users = syncRes.deliveryBoys;
         _newspaperEvents = syncRes.events;
         _approvalRequests = syncRes.approvalRequests;
+        _yearlySchemes = syncRes.yearlySchemes;
+        _yearlySubscriptions = syncRes.yearlySubscriptions;
         await _storage.saveCustomers(_customers);
         await _storage.savePublications(_publications);
         await _storage.saveUsers(_users);
         await _storage.saveNewspaperEvents(_newspaperEvents);
         await _storage.saveApprovalRequests(_approvalRequests);
+        await _storage.saveYearlyBookingSchemes(_yearlySchemes);
+        await _storage.saveYearlySubscriptions(_yearlySubscriptions);
       }
     }
 
@@ -1847,5 +1869,120 @@ class DeliveryProvider extends ChangeNotifier {
     _newspaperEvents.clear();
     await _storage.saveNewspaperEvents(_newspaperEvents);
     notifyListeners();
+  }
+
+  // ==========================================
+  // Yearly Subscriptions & Schemes Management
+  // ==========================================
+
+  List<YearlyBookingScheme> get yearlySchemes =>
+      List.unmodifiable(_yearlySchemes);
+
+  List<YearlyBookingScheme> get activeYearlySchemes =>
+      _yearlySchemes.where((s) => s.isActive).toList();
+
+  List<YearlySubscription> get yearlySubscriptions =>
+      List.unmodifiable(_yearlySubscriptions);
+
+  int get totalYearlySubscriptionsCount => _yearlySubscriptions.length;
+
+  int get activeYearlySubscriptionsCount =>
+      _yearlySubscriptions.where((s) => s.isActive).length;
+
+  int get expiringSoonYearlySubscriptionsCount =>
+      _yearlySubscriptions.where((s) => s.isExpiringSoon).length;
+
+  int get pendingGiftsCount =>
+      _yearlySubscriptions.where((s) => s.isGiftPending).length;
+
+  Future<void> saveYearlySubscription(YearlySubscription subscription) async {
+    final index =
+        _yearlySubscriptions.indexWhere((s) => s.id == subscription.id);
+    if (index >= 0) {
+      _yearlySubscriptions[index] = subscription;
+    } else {
+      _yearlySubscriptions = [subscription, ..._yearlySubscriptions];
+    }
+    _yearlySubscriptions.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    await _storage.saveYearlySubscriptions(_yearlySubscriptions);
+    notifyListeners();
+    _triggerAutoSync();
+    _cloudService
+        .syncYearlySubscriptionToCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          subscription: subscription,
+        )
+        .catchError((_) => false);
+  }
+
+  Future<void> deleteYearlySubscription(String id) async {
+    _yearlySubscriptions.removeWhere((s) => s.id == id);
+    await _storage.saveYearlySubscriptions(_yearlySubscriptions);
+    notifyListeners();
+    _triggerAutoSync();
+    _cloudService
+        .deleteYearlySubscriptionFromCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          subscriptionId: id,
+        )
+        .catchError((_) => false);
+  }
+
+  Future<void> toggleGiftDelivered(String id) async {
+    final index = _yearlySubscriptions.indexWhere((s) => s.id == id);
+    if (index == -1) return;
+    final current = _yearlySubscriptions[index];
+    final newDelivered = !current.isGiftDelivered;
+    final updated = current.copyWith(
+      isGiftDelivered: newDelivered,
+      giftDeliveredDate: newDelivered ? DateTime.now() : null,
+      updatedAt: DateTime.now(),
+    );
+    _yearlySubscriptions[index] = updated;
+    await _storage.saveYearlySubscriptions(_yearlySubscriptions);
+    notifyListeners();
+    _triggerAutoSync();
+    _cloudService
+        .syncYearlySubscriptionToCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          subscription: updated,
+        )
+        .catchError((_) => false);
+  }
+
+  Future<void> saveYearlyBookingScheme(YearlyBookingScheme scheme) async {
+    final index = _yearlySchemes.indexWhere((s) => s.id == scheme.id);
+    if (index >= 0) {
+      _yearlySchemes[index] = scheme;
+    } else {
+      _yearlySchemes.add(scheme);
+    }
+    await _storage.saveYearlyBookingSchemes(_yearlySchemes);
+    notifyListeners();
+    _triggerAutoSync();
+    _cloudService
+        .syncYearlyBookingSchemeToCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          scheme: scheme,
+        )
+        .catchError((_) => false);
+  }
+
+  Future<void> deleteYearlyBookingScheme(String id) async {
+    _yearlySchemes.removeWhere((s) => s.id == id);
+    await _storage.saveYearlyBookingSchemes(_yearlySchemes);
+    notifyListeners();
+    _triggerAutoSync();
+    _cloudService
+        .deleteYearlyBookingSchemeFromCloud(
+          url: _supabaseUrl,
+          anonKey: _supabaseAnonKey,
+          schemeId: id,
+        )
+        .catchError((_) => false);
   }
 }

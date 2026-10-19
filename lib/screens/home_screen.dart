@@ -18,6 +18,7 @@ import 'monthly_billing_report_screen.dart';
 import 'morning_delivery_list_screen.dart';
 import 'newspaper_report_screen.dart';
 import 'publications_screen.dart';
+import 'yearly_subscriptions_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final DeliveryProvider provider;
@@ -261,6 +262,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           builder: (_) => PublicationsScreen(provider: p),
                         ));
                         break;
+                      case 'yearly_subscriptions':
+                        Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => YearlySubscriptionsScreen(provider: p),
+                        ));
+                        break;
                       case 'switch_user':
                         _showUserSwitchDialog(context, p);
                         break;
@@ -358,6 +364,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           const Icon(Icons.newspaper, color: Colors.orange, size: 20),
                           const SizedBox(width: 10),
                           Expanded(child: Text(s.managePublications)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'yearly_subscriptions',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.card_membership, color: Colors.purple, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              s.tr('Yearly Subscriptions & Schemes', 'वार्षिक सदस्यता व योजनाएं'),
+                            ),
+                          ),
                         ],
                       ),
                     ),

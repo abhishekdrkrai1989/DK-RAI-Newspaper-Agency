@@ -5,6 +5,8 @@ import '../models/approval_request.dart';
 import '../models/customer.dart';
 import '../models/newspaper_event.dart';
 import '../models/publication.dart';
+import '../models/yearly_booking_scheme.dart';
+import '../models/yearly_subscription.dart';
 
 class CloudSyncResult {
   final bool success;
@@ -14,6 +16,8 @@ class CloudSyncResult {
   final int deliveryBoysSynced;
   final int eventsSynced;
   final int approvalsSynced;
+  final int yearlySchemesSynced;
+  final int yearlySubscriptionsSynced;
   final DateTime timestamp;
 
   const CloudSyncResult({
@@ -24,6 +28,8 @@ class CloudSyncResult {
     this.deliveryBoysSynced = 0,
     this.eventsSynced = 0,
     this.approvalsSynced = 0,
+    this.yearlySchemesSynced = 0,
+    this.yearlySubscriptionsSynced = 0,
     required this.timestamp,
   });
 }
@@ -129,7 +135,7 @@ class CloudSyncService {
     }
   }
 
-  /// Uploads (upserts) all local publications, customers, delivery boys, events, and approval requests to Supabase Cloud DB
+  /// Uploads (upserts) all local publications, customers, delivery boys, events, approval requests, and yearly subscriptions to Supabase Cloud DB
   Future<CloudSyncResult> uploadAll({
     required String url,
     required String anonKey,
@@ -138,6 +144,8 @@ class CloudSyncService {
     List<AppUser> users = const [],
     List<NewspaperEvent> events = const [],
     List<ApprovalRequest> approvalRequests = const [],
+    List<YearlyBookingScheme> yearlySchemes = const [],
+    List<YearlySubscription> yearlySubscriptions = const [],
   }) async {
     final cleanUrl = sanitizeUrl(url);
     if (cleanUrl.isEmpty || anonKey.trim().isEmpty) {
@@ -304,6 +312,48 @@ class CloudSyncService {
         } catch (_) {}
       }
 
+      // 6. Upsert Yearly Booking Schemes
+      int schemesSynced = 0;
+      if (yearlySchemes.isNotEmpty) {
+        try {
+          final schemesUri =
+              Uri.parse('$cleanUrl/rest/v1/yearly_booking_schemes');
+          final schemeRows = yearlySchemes.map((s) => s.toRow()).toList();
+          final schemeRes = await _client
+              .post(
+                schemesUri,
+                headers: _headers(anonKey, upsert: true),
+                body: jsonEncode(schemeRows),
+              )
+              .timeout(const Duration(seconds: 25));
+
+          if (schemeRes.statusCode >= 200 && schemeRes.statusCode < 300) {
+            schemesSynced = yearlySchemes.length;
+          }
+        } catch (_) {}
+      }
+
+      // 7. Upsert Yearly Subscriptions / Bookings
+      int subsSynced = 0;
+      if (yearlySubscriptions.isNotEmpty) {
+        try {
+          final subsUri =
+              Uri.parse('$cleanUrl/rest/v1/yearly_subscriptions');
+          final subRows = yearlySubscriptions.map((s) => s.toRow()).toList();
+          final subRes = await _client
+              .post(
+                subsUri,
+                headers: _headers(anonKey, upsert: true),
+                body: jsonEncode(subRows),
+              )
+              .timeout(const Duration(seconds: 25));
+
+          if (subRes.statusCode >= 200 && subRes.statusCode < 300) {
+            subsSynced = yearlySubscriptions.length;
+          }
+        } catch (_) {}
+      }
+
       return CloudSyncResult(
         success: true,
         message: 'Successfully backed up all data to Supabase Cloud DB!',
@@ -312,6 +362,8 @@ class CloudSyncService {
         deliveryBoysSynced: boysSynced,
         eventsSynced: eventsSynced,
         approvalsSynced: approvalsSynced,
+        yearlySchemesSynced: schemesSynced,
+        yearlySubscriptionsSynced: subsSynced,
         timestamp: DateTime.now(),
       );
     } catch (e) {
@@ -323,13 +375,15 @@ class CloudSyncService {
     }
   }
 
-  /// Downloads all publications, customers, delivery boys, events, and approval requests from Supabase Cloud DB
+  /// Downloads all publications, customers, delivery boys, events, approval requests, and yearly subscriptions from Supabase Cloud DB
   Future<({
     List<Customer>? customers,
     List<Publication>? publications,
     List<AppUser>? deliveryBoys,
     List<NewspaperEvent>? events,
     List<ApprovalRequest>? approvalRequests,
+    List<YearlyBookingScheme>? yearlySchemes,
+    List<YearlySubscription>? yearlySubscriptions,
     CloudSyncResult result,
   })> downloadAll({
     required String url,
@@ -343,6 +397,8 @@ class CloudSyncService {
         deliveryBoys: null,
         events: null,
         approvalRequests: null,
+        yearlySchemes: null,
+        yearlySubscriptions: null,
         result: CloudSyncResult(
           success: false,
           message: 'Cloud database is not configured.',
@@ -365,6 +421,8 @@ class CloudSyncService {
           deliveryBoys: null,
           events: null,
           approvalRequests: null,
+          yearlySchemes: null,
+          yearlySubscriptions: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -394,6 +452,8 @@ class CloudSyncService {
           deliveryBoys: null,
           events: null,
           approvalRequests: null,
+          yearlySchemes: null,
+          yearlySubscriptions: null,
           result: CloudSyncResult(
             success: false,
             message:
@@ -458,24 +518,65 @@ class CloudSyncService {
         }
       } catch (_) {}
 
+      // 6. Fetch Yearly Booking Schemes
+      List<YearlyBookingScheme>? remoteSchemes;
+      try {
+        final schemesUri =
+            Uri.parse('$cleanUrl/rest/v1/yearly_booking_schemes?select=*');
+        final schemesRes = await _client
+            .get(schemesUri, headers: _headers(anonKey))
+            .timeout(const Duration(seconds: 15));
+        if (schemesRes.statusCode >= 200 && schemesRes.statusCode < 300) {
+          final schemesListRaw = jsonDecode(schemesRes.body) as List<dynamic>;
+          remoteSchemes = schemesListRaw
+              .map((row) =>
+                  YearlyBookingScheme.fromRow(row as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+
+      // 7. Fetch Yearly Subscriptions / Bookings
+      List<YearlySubscription>? remoteSubs;
+      try {
+        final subsUri = Uri.parse(
+          '$cleanUrl/rest/v1/yearly_subscriptions?select=*&order=updated_at.desc',
+        );
+        final subsRes = await _client
+            .get(subsUri, headers: _headers(anonKey))
+            .timeout(const Duration(seconds: 15));
+        if (subsRes.statusCode >= 200 && subsRes.statusCode < 300) {
+          final subsListRaw = jsonDecode(subsRes.body) as List<dynamic>;
+          remoteSubs = subsListRaw
+              .map((row) =>
+                  YearlySubscription.fromRow(row as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (_) {}
+
       final boysCount = remoteBoys?.length ?? 0;
       final eventsCount = remoteEvents?.length ?? 0;
       final approvalsCount = remoteApprovals?.length ?? 0;
+      final schemesCount = remoteSchemes?.length ?? 0;
+      final subsCount = remoteSubs?.length ?? 0;
       return (
         customers: remoteCustomers,
         publications: remotePublications,
         deliveryBoys: remoteBoys,
         events: remoteEvents,
         approvalRequests: remoteApprovals,
+        yearlySchemes: remoteSchemes,
+        yearlySubscriptions: remoteSubs,
         result: CloudSyncResult(
           success: true,
           message:
-              'Downloaded ${remoteCustomers.length} homes, ${remotePublications.length} publications, $boysCount hawkers, $eventsCount events & $approvalsCount approvals from Supabase.',
+              'Downloaded ${remoteCustomers.length} homes, ${remotePublications.length} publications, $boysCount hawkers, $eventsCount events, $approvalsCount approvals, $schemesCount schemes & $subsCount yearly bookings from Supabase.',
           customersSynced: remoteCustomers.length,
           publicationsSynced: remotePublications.length,
           deliveryBoysSynced: boysCount,
           eventsSynced: eventsCount,
           approvalsSynced: approvalsCount,
+          yearlySchemesSynced: schemesCount,
+          yearlySubscriptionsSynced: subsCount,
           timestamp: DateTime.now(),
         ),
       );
@@ -486,6 +587,8 @@ class CloudSyncService {
         deliveryBoys: null,
         events: null,
         approvalRequests: null,
+        yearlySchemes: null,
+        yearlySubscriptions: null,
         result: CloudSyncResult(
           success: false,
           message: 'Error downloading from cloud: $e',
@@ -502,6 +605,8 @@ class CloudSyncService {
     List<AppUser> deliveryBoys,
     List<NewspaperEvent> events,
     List<ApprovalRequest> approvalRequests,
+    List<YearlyBookingScheme> yearlySchemes,
+    List<YearlySubscription> yearlySubscriptions,
     CloudSyncResult result,
   })> syncTwoWay({
     required String url,
@@ -511,6 +616,8 @@ class CloudSyncService {
     List<AppUser> localUsers = const [],
     List<NewspaperEvent> localEvents = const [],
     List<ApprovalRequest> localApprovalRequests = const [],
+    List<YearlyBookingScheme> localYearlySchemes = const [],
+    List<YearlySubscription> localYearlySubscriptions = const [],
   }) async {
     final downloadResult =
         await downloadAll(url: url, anonKey: anonKey);
@@ -524,6 +631,8 @@ class CloudSyncService {
         deliveryBoys: localUsers,
         events: localEvents,
         approvalRequests: localApprovalRequests,
+        yearlySchemes: localYearlySchemes,
+        yearlySubscriptions: localYearlySubscriptions,
         result: downloadResult.result,
       );
     }
@@ -601,6 +710,37 @@ class CloudSyncService {
     final mergedApprovals = mergedApprovalsMap.values.toList()
       ..sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
 
+    // Merge Yearly Booking Schemes
+    final mergedSchemesMap = <String, YearlyBookingScheme>{};
+    if (downloadResult.yearlySchemes != null) {
+      for (final s in downloadResult.yearlySchemes!) {
+        mergedSchemesMap[s.id] = s;
+      }
+    }
+    for (final s in localYearlySchemes) {
+      mergedSchemesMap[s.id] = s;
+    }
+    final mergedSchemes = mergedSchemesMap.values.toList();
+
+    // Merge Yearly Subscriptions
+    final mergedSubsMap = <String, YearlySubscription>{};
+    if (downloadResult.yearlySubscriptions != null) {
+      for (final s in downloadResult.yearlySubscriptions!) {
+        mergedSubsMap[s.id] = s;
+      }
+    }
+    for (final local in localYearlySubscriptions) {
+      final remote = mergedSubsMap[local.id];
+      if (remote == null) {
+        mergedSubsMap[local.id] = local;
+      } else {
+        mergedSubsMap[local.id] =
+            local.updatedAt.isAfter(remote.updatedAt) ? local : remote;
+      }
+    }
+    final mergedSubs = mergedSubsMap.values.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+
     // Upload merged state back to cloud so both sides are in sync
     final uploadResult = await uploadAll(
       url: url,
@@ -610,6 +750,8 @@ class CloudSyncService {
       users: mergedBoys,
       events: mergedEvents,
       approvalRequests: mergedApprovals,
+      yearlySchemes: mergedSchemes,
+      yearlySubscriptions: mergedSubs,
     );
 
     if (!uploadResult.success) {
@@ -619,6 +761,8 @@ class CloudSyncService {
         deliveryBoys: mergedBoys,
         events: mergedEvents,
         approvalRequests: mergedApprovals,
+        yearlySchemes: mergedSchemes,
+        yearlySubscriptions: mergedSubs,
         result: uploadResult,
       );
     }
@@ -629,15 +773,19 @@ class CloudSyncService {
       deliveryBoys: mergedBoys,
       events: mergedEvents,
       approvalRequests: mergedApprovals,
+      yearlySchemes: mergedSchemes,
+      yearlySubscriptions: mergedSubs,
       result: CloudSyncResult(
         success: true,
         message:
-            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications, ${mergedBoys.length} hawkers, ${mergedEvents.length} events & ${mergedApprovals.length} approvals synchronized with Supabase.',
+            'Two-way sync complete: ${mergedCustomers.length} homes, ${mergedPublications.length} publications, ${mergedBoys.length} hawkers, ${mergedEvents.length} events, ${mergedApprovals.length} approvals, ${mergedSchemes.length} schemes & ${mergedSubs.length} yearly bookings synchronized with Supabase.',
         customersSynced: mergedCustomers.length,
         publicationsSynced: mergedPublications.length,
         deliveryBoysSynced: mergedBoys.length,
         eventsSynced: mergedEvents.length,
         approvalsSynced: mergedApprovals.length,
+        yearlySchemesSynced: mergedSchemes.length,
+        yearlySubscriptionsSynced: mergedSubs.length,
         timestamp: DateTime.now(),
       ),
     );
@@ -958,6 +1106,88 @@ class CloudSyncService {
     }
   }
 
+  Future<bool> syncYearlySubscriptionToCloud({
+    required String url,
+    required String anonKey,
+    required YearlySubscription subscription,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse('$cleanUrl/rest/v1/yearly_subscriptions');
+      final res = await _client
+          .post(
+            uri,
+            headers: _headers(anonKey, upsert: true),
+            body: jsonEncode([subscription.toRow()]),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteYearlySubscriptionFromCloud({
+    required String url,
+    required String anonKey,
+    required String subscriptionId,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse(
+          '$cleanUrl/rest/v1/yearly_subscriptions?id=eq.$subscriptionId');
+      final res = await _client
+          .delete(uri, headers: _headers(anonKey))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> syncYearlyBookingSchemeToCloud({
+    required String url,
+    required String anonKey,
+    required YearlyBookingScheme scheme,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse('$cleanUrl/rest/v1/yearly_booking_schemes');
+      final res = await _client
+          .post(
+            uri,
+            headers: _headers(anonKey, upsert: true),
+            body: jsonEncode([scheme.toRow()]),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteYearlyBookingSchemeFromCloud({
+    required String url,
+    required String anonKey,
+    required String schemeId,
+  }) async {
+    final cleanUrl = sanitizeUrl(url);
+    if (cleanUrl.isEmpty || anonKey.trim().isEmpty) return false;
+    try {
+      final uri = Uri.parse(
+          '$cleanUrl/rest/v1/yearly_booking_schemes?id=eq.$schemeId');
+      final res = await _client
+          .delete(uri, headers: _headers(anonKey))
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode >= 200 && res.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Copyable PostgreSQL SQL script for Supabase SQL Editor
   static String get sqlSetupScript => '''
 -- ==============================================================
@@ -1059,14 +1289,46 @@ create table if not exists approval_requests (
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
 
--- 6. Enable Row Level Security (RLS)
+-- 6. Create Yearly Booking Schemes Master Table
+create table if not exists yearly_booking_schemes (
+  id text primary key,
+  name text not null,
+  price numeric not null default 0.0,
+  description text default '',
+  is_active boolean default true,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 7. Create Yearly Subscriptions / Bookings Table
+create table if not exists yearly_subscriptions (
+  id text primary key,
+  customer_name text not null,
+  customer_id text default '',
+  address text not null default '',
+  phone text default '',
+  newspaper_scheme text not null,
+  start_date text not null,
+  end_date text not null,
+  coupon_type text not null default 'Physical Coupon',
+  coupon_code text default '',
+  is_gift_applicable boolean default false,
+  is_gift_delivered boolean default false,
+  gift_item text default '',
+  gift_delivered_date text,
+  notes text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+-- 8. Enable Row Level Security (RLS)
 alter table publications enable row level security;
 alter table customers enable row level security;
 alter table delivery_boys enable row level security;
 alter table newspaper_events enable row level security;
 alter table approval_requests enable row level security;
+alter table yearly_booking_schemes enable row level security;
+alter table yearly_subscriptions enable row level security;
 
--- 7. Enable Public Anon API Access (Read & Write with Anon Key)
+-- 9. Enable Public Anon API Access (Read & Write with Anon Key)
 drop policy if exists "Allow all on publications for anon" on publications;
 create policy "Allow all on publications for anon"
   on publications for all
@@ -1097,7 +1359,19 @@ create policy "Allow all on approval_requests for anon"
   using (true)
   with check (true);
 
--- 8. Notify PostgREST to reload schema cache immediately
+drop policy if exists "Allow all on yearly_booking_schemes for anon" on yearly_booking_schemes;
+create policy "Allow all on yearly_booking_schemes for anon"
+  on yearly_booking_schemes for all
+  using (true)
+  with check (true);
+
+drop policy if exists "Allow all on yearly_subscriptions for anon" on yearly_subscriptions;
+create policy "Allow all on yearly_subscriptions for anon"
+  on yearly_subscriptions for all
+  using (true)
+  with check (true);
+
+-- 10. Notify PostgREST to reload schema cache immediately
 notify pgrst, 'reload schema';
 ''';
 
@@ -1166,6 +1440,40 @@ create table if not exists approval_requests (
 alter table approval_requests enable row level security;
 drop policy if exists "Allow all on approval_requests for anon" on approval_requests;
 create policy "Allow all on approval_requests for anon" on approval_requests for all using (true) with check (true);
+
+create table if not exists yearly_booking_schemes (
+  id text primary key,
+  name text not null,
+  price numeric not null default 0.0,
+  description text default '',
+  is_active boolean default true,
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+alter table yearly_booking_schemes enable row level security;
+drop policy if exists "Allow all on yearly_booking_schemes for anon" on yearly_booking_schemes;
+create policy "Allow all on yearly_booking_schemes for anon" on yearly_booking_schemes for all using (true) with check (true);
+
+create table if not exists yearly_subscriptions (
+  id text primary key,
+  customer_name text not null,
+  customer_id text default '',
+  address text not null default '',
+  phone text default '',
+  newspaper_scheme text not null,
+  start_date text not null,
+  end_date text not null,
+  coupon_type text not null default 'Physical Coupon',
+  coupon_code text default '',
+  is_gift_applicable boolean default false,
+  is_gift_delivered boolean default false,
+  gift_item text default '',
+  gift_delivered_date text,
+  notes text default '',
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+alter table yearly_subscriptions enable row level security;
+drop policy if exists "Allow all on yearly_subscriptions for anon" on yearly_subscriptions;
+create policy "Allow all on yearly_subscriptions for anon" on yearly_subscriptions for all using (true) with check (true);
 
 notify pgrst, 'reload schema';
 ''';
